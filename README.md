@@ -2,10 +2,7 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
+<p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
     <p align="center">
 <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
 <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
@@ -21,78 +18,193 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+## Usecase diagram
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+# Employee Management System (EMS)
 
-## Project setup
+## 📖 Overview
 
-```bash
-$ npm install
-```
+The **Employee Management System (EMS)** is a web-based application designed to streamline and automate HR operations within an organization. It centralizes employee data, attendance tracking, leave management, and performance evaluation into a single platform.
 
-## Compile and run the project
+This system helps reduce manual work, improve accuracy, and enhance overall productivity.
 
-```bash
-# development
-$ npm run start
+---
 
-# watch mode
-$ npm run start:dev
+## 🎯 Motivation
 
-# production mode
-$ npm run start:prod
-```
+As organizations grow, traditional HR methods (manual records, spreadsheets) become inefficient and error-prone.
 
-## Run tests
+This project was built to:
 
-```bash
-# unit tests
-$ npm run test
+- Automate HR processes
+- Improve data accuracy
+- Reduce administrative workload
+- Enable data-driven decision making
+- Enhance employee engagement and experience
 
-# e2e tests
-$ npm run test:e2e
+---
 
-# test coverage
-$ npm run test:cov
-```
+## ❗ Problem Statement
 
-## Deployment
+Organizations face challenges such as:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- Managing employee data across multiple systems
+- Inefficient attendance and leave tracking
+- Lack of integration between HR processes
+- High risk of errors and data loss
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+---
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+## 💡 Solution
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The EMS provides a **centralized system** that:
 
-## Resources
+- Manages employee records
+- Tracks attendance and leave
+- Handles performance reviews
+- Generates reports and analytics
 
-Check out a few resources that may come in handy when working with NestJS:
+---
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## 🚀 Features
 
-## Support
+### 🔐 Authentication & Authorization
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- Secure login system
+- Role-based access:
+  - Admin
+  - Manager
+  - Employee
 
-## Stay in touch
+### 👨‍💼 Employee Management
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- Add, update, delete employees
+- Store personal and job information
+- Assign employees to departments
 
-## License
+### 🏢 Department Management
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Create and manage departments
+- Assign employees to departments
+
+### ⏱ Attendance Tracking
+
+- Daily attendance recording
+- Attendance reports
+- Dashboard insights
+
+### 📝 Leave Management
+
+- Apply for leave
+- Approve/reject requests
+- Track leave history
+
+### 📊 Performance Reviews
+
+- Add performance evaluations
+- Employee self-review
+- Performance reports
+
+### 📈 Reports & Analytics
+
+- Generate HR reports
+- Track employee performance and attendance trends
+
+---
+
+## 📦 Scope
+
+### ✅ Included
+
+- User authentication & role management
+- Employee & department management
+- Attendance tracking
+- Leave management
+- Performance reviews
+- Basic reporting
+
+### ❌ Excluded
+
+- Advanced AI analytics
+- Physical document management
+- Conflict resolution systems
+- Custom external software integrations
+
+---
+
+## 🧩 System Design
+
+### 📊 Diagrams Included
+
+- Data Flow Diagram (DFD)
+- Use Case Diagram
+- Activity Diagram
+- Sequence Diagram
+- Class Diagram
+- Object Diagram
+- State Diagram
+
+---
+
+## 🔄 Main Use Cases
+
+- Login / Logout
+- Manage Employees
+- Track Attendance
+- Manage Leave Requests
+- Performance Reviews
+- Generate Reports
+
+---
+
+## 🌍 Real-World Systems Inspiration
+
+This project is inspired by:
+
+- Workday HR System
+- SAP SuccessFactors
+- Zoho People
+
+---
+
+## ⚡ Key Enhancements
+
+- Employee self-service portal
+- Scalable architecture
+- Advanced reporting & analytics
+
+---
+
+## 💰 Project Value
+
+Expected benefits include:
+
+- Improved efficiency through automation
+- Better employee engagement
+- Reduced operational costs
+- Data-driven decision making
+
+---
+
+## 🛠 Future Improvements
+
+## \* AI-powered analytics
+
+- Mobile application
+- Integration with payroll systems
+- Cloud deployment
+-
+
+---
+
+## Usecase Digram
+
+![1773778346314](image/README/1773778346314.png)
+
+## Class diagram
+
+![1773778403078](image/README/1773778403078.png)
+
+## Object diagram
+
+![1773778817055](image/README/1773778817055.png)
