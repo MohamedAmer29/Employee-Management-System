@@ -5,8 +5,9 @@ export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
   const dbType = configService.get<string>('TYPE');
-
+  console.log(configService);
   const validTypes = ['postgres', 'mysql', 'mariadb', 'sqlite', 'mssql'];
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   if (!validTypes.includes(dbType as any)) {
     throw new Error(
       `Invalid database type: ${dbType}. Must be one of: ${validTypes.join(', ')}`,
@@ -22,7 +23,7 @@ export const getDatabaseConfig = (
     password: configService.get<string>('PASSWORD'),
     database: configService.get<string>('DATABASE'),
     autoLoadEntities: true,
-    synchronize: configService.get<string>('NODE_ENV') === 'development',
+    synchronize: true,
     logging: configService.get<string>('NODE_ENV') === 'development',
   };
 };

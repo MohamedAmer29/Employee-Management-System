@@ -18,8 +18,6 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Usecase diagram
-
 # Employee Management System (EMS)
 
 ## 📖 Overview
@@ -201,10 +199,20 @@ Expected benefits include:
 
 ![1773778346314](image/README/1773778346314.png)
 
+---
+
 ## Class diagram
 
 ![1773778403078](image/README/1773778403078.png)
 
+---
+
 ## Object diagram
 
 ![1773778817055](image/README/1773778817055.png)
+
+---
+
+## Data Flow Digram
+
+![1773778907228](image/README/1773778907228.png)
