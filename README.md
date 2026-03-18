@@ -18,8 +18,6 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-# Employee Management System (EMS)
-
 ## 📖 Overview
 
 The **Employee Management System (EMS)** is a web-based application designed to streamline and automate HR operations within an organization. It centralizes employee data, attendance tracking, leave management, and performance evaluation into a single platform.
@@ -191,9 +189,7 @@ Expected benefits include:
 - Mobile application
 - Integration with payroll systems
 - Cloud deployment
--
-
----
+- ***
 
 ## Usecase Digram
 
