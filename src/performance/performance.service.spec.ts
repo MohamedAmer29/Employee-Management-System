@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PerformanceService } from './performance.service';
 import { PerformanceReview } from './entities/performance';
 import { User } from '../users/entities/user.entity';
@@ -34,6 +35,10 @@ describe('PerformanceService', () => {
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Employee), useValue: employeeRepo },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
+        },
       ],
     }).compile();
 

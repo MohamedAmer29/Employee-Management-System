@@ -49,7 +49,8 @@ export const ERROR_MESSAGES = {
 
   // Performance
   PERFORMANCE_NOT_FOUND: 'Performance review not found',
-  PERFORMANCE_ALREADY_EXISTS: 'Performance review already exists for this period',
+  PERFORMANCE_ALREADY_EXISTS:
+    'Performance review already exists for this period',
 
   // Notification
   NOTIFICATION_NOT_FOUND: 'Notification not found',
@@ -60,7 +61,8 @@ export const ERROR_MESSAGES = {
   // Database
   DATABASE_ERROR: 'A database error occurred',
   DATABASE_CONNECTION_ERROR: 'Unable to connect to the database',
-  FOREIGN_KEY_VIOLATION: 'This operation violates a related resource constraint',
+  FOREIGN_KEY_VIOLATION:
+    'This operation violates a related resource constraint',
   DUPLICATE_ENTRY: 'A record with this value already exists',
 
   // File Upload

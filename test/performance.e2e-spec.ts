@@ -3,28 +3,26 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import 'dotenv/config';
 import { AppModule } from '../src/app.module';
-import { User } from '../src/users/entities/user.entity';
 import { Employee } from '../src/employees/entities/employee.entity';
+
+const username = `adminuser_${Date.now()}`;
 
 describe('Performance e2e', () => {
   let app: INestApplication;
-  let userRepository: Repository<User>;
   let employeeRepository: Repository<Employee>;
   let adminToken: string;
   let employee: Employee;
 
   beforeAll(async () => {
-    process.env.TYPE = 'sqlite';
-    process.env.HOSTNAME = 'localhost';
-    process.env.DATABASE_PORT = '0';
-    process.env.DATABASE_USERNAME = '';
-    process.env.PASSWORD = '';
-    process.env.DATABASE = ':memory:';
-    process.env.NODE_ENV = 'test';
-    process.env.JWT_SECRET = 'test-secret';
-    process.env.REFRESH_SECRET = 'refresh-secret';
-    process.env.REFRESH_EXPIRES_IN = '7d';
+    process.env.TYPE = process.env.TYPE ?? '';
+    process.env.HOSTNAME = process.env.HOSTNAME ?? '';
+    process.env.DATABASE_PORT = process.env.DATABASE_PORT ?? '';
+    process.env.DATABASE_USERNAME = process.env.DATABASE_USERNAME ?? '';
+    process.env.PASSWORD = process.env.PASSWORD ?? '';
+    process.env.DATABASE = process.env.DATABASE ?? '';
+    process.env.NODE_ENV = 'development';
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -32,7 +30,6 @@ describe('Performance e2e', () => {
     app = moduleRef.createNestApplication();
     await app.init();
 
-    userRepository = moduleRef.get<Repository<User>>(getRepositoryToken(User));
     employeeRepository = moduleRef.get<Repository<Employee>>(
       getRepositoryToken(Employee),
     );
@@ -46,7 +43,7 @@ describe('Performance e2e', () => {
         city: 'Testville',
         phoneNumber: '5550000000',
         nationalId: '111111111',
-        username: 'adminuser',
+        username,
         password: 'AdminPass123',
         role: 'Admin',
       })

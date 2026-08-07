@@ -9,7 +9,10 @@ import {
 import { Response } from 'express';
 import { ValidationError as NestValidationError } from '@nestjs/common/interfaces/external/validation-error.interface';
 import { ErrorCode } from '../exceptions/error-code.enum';
-import { ExceptionResponse, ValidationError } from '../exceptions/exception-response.interface';
+import {
+  ExceptionResponse,
+  ValidationError,
+} from '../exceptions/exception-response.interface';
 
 @Catch()
 export class ValidationExceptionFilter implements ExceptionFilter {
@@ -52,7 +55,9 @@ export class ValidationExceptionFilter implements ExceptionFilter {
             `${method} ${path} - ${userInfo} - Validation failed: ${JSON.stringify(errors)}`,
           );
 
-          return response.status(HttpStatus.BAD_REQUEST).json(exceptionResponse);
+          return response
+            .status(HttpStatus.BAD_REQUEST)
+            .json(exceptionResponse);
         }
       }
     }
@@ -61,7 +66,9 @@ export class ValidationExceptionFilter implements ExceptionFilter {
     throw exception;
   }
 
-  private formatValidationErrors(errors: NestValidationError[]): ValidationError[] {
+  private formatValidationErrors(
+    errors: NestValidationError[],
+  ): ValidationError[] {
     const formattedErrors: ValidationError[] = [];
 
     for (const error of errors) {

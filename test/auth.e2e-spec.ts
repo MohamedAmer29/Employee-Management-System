@@ -1,29 +1,27 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-floating-promises */
+
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import 'dotenv/config';
 import { AppModule } from '../src/app.module';
-import { describe, it } from 'node:test';
-import { beforeAll, expect } from '@jest/globals';
+
+const username = `janedoe_${Date.now()}`;
 
 describe('Auth e2e', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    process.env.TYPE = 'sqlite';
-    process.env.HOSTNAME = 'localhost';
-    process.env.DATABASE_PORT = '0';
-    process.env.DATABASE_USERNAME = '';
-    process.env.PASSWORD = '';
-    process.env.DATABASE = ':memory:';
+    process.env.TYPE = process.env.TYPE ?? 'postgres';
+    process.env.HOSTNAME = process.env.HOSTNAME ?? 'localhost';
+    process.env.DATABASE_PORT = process.env.DATABASE_PORT ?? '5432';
+    process.env.DATABASE_USERNAME = process.env.DATABASE_USERNAME ?? 'postgres';
+    process.env.PASSWORD = process.env.PASSWORD ?? 'postgres';
+    process.env.DATABASE = process.env.DATABASE ?? 'EMS';
     process.env.NODE_ENV = 'test';
-    process.env.JWT_SECRET = 'test-secret';
-    process.env.REFRESH_SECRET = 'refresh-secret';
-    process.env.REFRESH_EXPIRES_IN = '7d';
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -44,7 +42,7 @@ describe('Auth e2e', () => {
       city: 'Denver',
       phoneNumber: '5551234567',
       nationalId: '987654321',
-      username: 'janedoe',
+      username,
       password: 'Password123',
       role: 'Employee',
     };
@@ -58,7 +56,7 @@ describe('Auth e2e', () => {
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ username: 'janedoe', password: 'Password123' })
+      .send({ username, password: 'Password123' })
       .expect(201);
 
     expect(loginResponse.body.accessToken).toBeDefined();
@@ -67,7 +65,7 @@ describe('Auth e2e', () => {
   it('should verify a valid access token', async () => {
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ username: 'janedoe', password: 'Password123' })
+      .send({ username, password: 'Password123' })
       .expect(201);
 
     const token = loginResponse.body.accessToken;

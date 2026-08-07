@@ -53,7 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           errors = responseObj.errors;
         }
       } else {
-        message = exceptionResponse as string;
+        message = exceptionResponse;
         errorCode = this.getErrorCodeFromStatus(statusCode);
       }
 

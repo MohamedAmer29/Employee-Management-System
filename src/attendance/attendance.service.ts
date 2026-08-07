@@ -107,7 +107,6 @@ export class AttendanceService {
   }
 
   async findByEmployee(employeeId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await this.employeesService.findOne(employeeId);
 
     return this.attendanceRepository.find({

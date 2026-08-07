@@ -332,6 +332,7 @@ export class AuthService {
 
     if (refreshToken) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         const payload = this.jwtService.verify(refreshToken, {
           secret: this.getRefreshSecret(),
         });
