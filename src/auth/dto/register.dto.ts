@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { IsEnum, IsString, IsStrongPassword } from 'class-validator';
 import { Role } from '../interfaces/Role.enum';
 import { ApiProperty } from '@nestjs/swagger';
