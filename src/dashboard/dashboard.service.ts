@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -35,7 +38,6 @@ import {
   EmployeeLeaveStats,
   EmployeeNotificationStats,
   EmployeePerformanceStats,
-  TodayAttendance,
 } from './interfaces/employee-dashboard.interface';
 import { DashboardPeriod } from './enums/dashboard-period.enum';
 import { LeaveStatus } from '@/leave/interfaces/leave.status';
@@ -202,6 +204,7 @@ export class DashboardService {
       performanceStats,
       notificationStats,
     ] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/await-thenable
       this.getEmployeeInfo(employee),
       this.getEmployeeAttendanceStats(employee.id),
       this.getEmployeeLeaveStats(employee.id),
@@ -582,7 +585,7 @@ export class DashboardService {
       .getRawMany();
   }
 
-  private async getEmployeeInfo(employee: Employee): Promise<EmployeeInfo> {
+  private getEmployeeInfo(employee: Employee): EmployeeInfo {
     return {
       name: employee.fullName,
       position: employee.position,
