@@ -78,6 +78,7 @@ export class AuthService {
     const payload = {
       sub: newUser.id,
       role: newUser.role,
+      tokenVersion: newUser.tokenVersion,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -111,6 +112,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -127,7 +129,7 @@ export class AuthService {
     return { accessToken };
   }
 
-  refreshToken(refreshToken: string | undefined, res: Response) {
+  async refreshToken(refreshToken: string | undefined, res: Response) {
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is required');
     }
@@ -137,9 +139,25 @@ export class AuthService {
         secret: this.getRefreshSecret(),
       });
 
+      const user = await this.userRepository.findOne({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      if (user.tokenVersion !== payload.tokenVersion) {
+        throw new UnauthorizedException('Refresh token is no longer valid');
+      }
+
+      user.tokenVersion += 1;
+      await this.userRepository.save(user);
+
       const accessPayload = {
         sub: payload.sub,
         role: payload.role,
+        tokenVersion: user.tokenVersion,
       };
 
       const accessToken = this.jwtService.sign(accessPayload, {
@@ -179,6 +197,10 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
+      if (user.tokenVersion !== payload.tokenVersion) {
+        throw new UnauthorizedException('Token is no longer valid');
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...result } = user as any;
       return result;
@@ -187,13 +209,26 @@ export class AuthService {
     }
   }
 
-  verifyToken(token: string | undefined) {
+  async verifyToken(token: string | undefined) {
     if (!token) {
       throw new BadRequestException('Token is required');
     }
 
     try {
       const payload = this.jwtService.verify(token);
+
+      const user = await this.userRepository.findOne({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      if (user.tokenVersion !== payload.tokenVersion) {
+        throw new UnauthorizedException('Token is no longer valid');
+      }
+
       return { valid: true, payload };
     } catch (error: any) {
       throw new UnauthorizedException(error?.message ?? 'Invalid token');

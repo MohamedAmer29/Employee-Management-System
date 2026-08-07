@@ -40,6 +40,9 @@ export class User {
   @Column({ type: 'enum', enum: Role })
   role!: Role;
 
+  @Column({ default: 0 })
+  tokenVersion!: number;
+
   @OneToOne(() => Employee, (employee) => employee.user)
   @JoinColumn()
   employee!: Employee;

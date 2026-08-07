@@ -13,7 +13,18 @@ async function bootstrap() {
     .setTitle('EMS API')
     .setDescription('The EMS API description')
     .setVersion('1.0')
-    .addTag('EMS')
+    // 1. Add the bearer auth configuration
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT', // Optional
+        name: 'JWT', // Optional
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'Authorization', // This name must match the name in the @ApiBearerAuth() decorator
+    )
     .build();
   // 2. Create the OpenAPI document
   const document = SwaggerModule.createDocument(app, config);
