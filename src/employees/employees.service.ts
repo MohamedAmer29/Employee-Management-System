@@ -21,6 +21,9 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { Department } from '../department/entities/department.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../auth/interfaces/Role.enum';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { EmployeeUpdatedEvent } from '../common/events/employee-updated.event';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -33,6 +36,7 @@ export class EmployeesService {
     private readonly departmentRepository: Repository<Department>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(dto: CreateEmployeeDto) {
@@ -83,8 +87,14 @@ export class EmployeesService {
     return employee;
   }
 
-  async update(id: string, dto: UpdateEmployeeDto) {
+  async update(id: string, dto: UpdateEmployeeDto, userId?: string) {
     const employee = await this.findOne(id);
+
+    const oldValues: Record<string, unknown> = {};
+    if (dto.fullName) oldValues.fullName = employee.fullName;
+    if (dto.email) oldValues.email = employee.email;
+    if (dto.phone) oldValues.phone = employee.phone;
+    if (dto.position) oldValues.position = employee.position;
 
     Object.assign(employee, dto);
 
@@ -98,7 +108,30 @@ export class EmployeesService {
       employee.department = department;
     }
 
-    return this.employeeRepository.save(employee);
+    const updatedEmployee = await this.employeeRepository.save(employee);
+
+    const employeeUser = await this.userRepository.findOne({
+      where: { employee: { id: employee.id } },
+    });
+
+    if (employeeUser) {
+      this.eventEmitter.emit(
+        'employee.updated',
+        new EmployeeUpdatedEvent(employeeUser.id, employee.fullName),
+      );
+    }
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'Employee',
+      entityId: String(updatedEmployee.id),
+      description: 'Employee information updated',
+      oldValues,
+      newValues: dto,
+    });
+
+    return updatedEmployee;
   }
 
   async remove(id: string) {

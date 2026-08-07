@@ -14,7 +14,9 @@ import { Employee } from '../employees/entities/employee.entity';
 import { Role } from '../auth/interfaces/Role.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
-import { NotificationType } from '../notifications/enums/notification-type.enum';
+import { LeaveCreatedEvent } from '../common/events/leave-created.event';
+import { LeaveApprovedEvent } from '../common/events/leave-approved.event';
+import { LeaveRejectedEvent } from '../common/events/leave-rejected.event';
 
 const ANNUAL_LEAVE_DAYS = 20;
 
@@ -53,11 +55,10 @@ export class LeaveService {
 
     const result = await this.leaveRepository.save(leave);
     this.notifyManager(employee, result);
-    this.eventEmitter.emit('leave.created', {
-      userId,
-      employeeId: employee.id,
-      leaveId: result.id,
-    });
+    this.eventEmitter.emit(
+      'leave.created',
+      new LeaveCreatedEvent(userId, employee.id, employee.fullName),
+    );
     this.eventEmitter.emit('audit.log.created', {
       userId,
       action: AuditAction.CREATE,
@@ -96,19 +97,17 @@ export class LeaveService {
       where: { employee: { id: leave.employee.id } },
     });
     if (employeeUser) {
-      this.eventEmitter.emit('notification.created', {
-        userId: employeeUser.id,
-        type:
-          status === LeaveStatus.APPROVED
-            ? NotificationType.LEAVE_APPROVED
-            : NotificationType.LEAVE_REJECTED,
-        title:
-          status === LeaveStatus.APPROVED ? 'Leave approved' : 'Leave rejected',
-        message:
-          status === LeaveStatus.APPROVED
-            ? 'Your leave request has been approved.'
-            : 'Your leave request has been rejected.',
-      });
+      if (status === LeaveStatus.APPROVED) {
+        this.eventEmitter.emit(
+          'leave.approved',
+          new LeaveApprovedEvent(employeeUser.id, leave.employee.fullName),
+        );
+      } else if (status === LeaveStatus.REJECTED) {
+        this.eventEmitter.emit(
+          'leave.rejected',
+          new LeaveRejectedEvent(employeeUser.id, leave.employee.fullName),
+        );
+      }
     }
     this.eventEmitter.emit('audit.log.created', {
       userId,

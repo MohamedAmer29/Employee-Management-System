@@ -1,14 +1,22 @@
 import { Employee } from '@/employees/entities/employee.entity';
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity()
 export class Attendance {
   @PrimaryGeneratedColumn()
   id!: string;
 
+  @Index()
   @ManyToOne(() => Employee, (emp) => emp.attendanceRecords)
   employee!: Employee;
 
+  @Index()
   @Column({ type: 'date' })
   date!: string;
 

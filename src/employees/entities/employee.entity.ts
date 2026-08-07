@@ -6,7 +6,9 @@ import { PerformanceReview } from '@/performance/entities/performance';
 import { User } from '@/users/entities/user.entity';
 import {
   Column,
+  CreateDateColumn,
   Entity,
+  Index,
   ManyToOne,
   OneToMany,
   OneToOne,
@@ -18,6 +20,7 @@ export class Employee {
   @PrimaryGeneratedColumn()
   id!: string;
 
+  @Index()
   @Column({ default: false })
   isActive!: boolean;
 
@@ -40,6 +43,7 @@ export class Employee {
   profilePicture?: string;
 
   @ManyToOne(() => Department, (dept) => dept.employees, { nullable: true })
+  @Index()
   department?: Department;
 
   @OneToMany(() => Attendance, (att) => att.employee)
@@ -53,4 +57,7 @@ export class Employee {
 
   @OneToOne(() => User, (user) => user.employee)
   user!: User;
+
+  @CreateDateColumn()
+  createdAt!: Date;
 }

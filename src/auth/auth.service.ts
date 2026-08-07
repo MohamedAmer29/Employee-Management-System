@@ -326,8 +326,33 @@ export class AuthService {
     return 7 * 24 * 60 * 60 * 1000;
   }
 
-  logout(res: Response) {
+  logout(res: Response, req: Request) {
+    const refreshToken = req.cookies?.refresh_token;
+    let userId: string | undefined;
+
+    if (refreshToken) {
+      try {
+        const payload = this.jwtService.verify(refreshToken, {
+          secret: this.getRefreshSecret(),
+        });
+        userId = payload.sub;
+      } catch {
+        // Token is invalid, proceed with logout without userId
+      }
+    }
+
     res.clearCookie('refresh_token');
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.LOGOUT,
+      entity: 'User',
+      entityId: userId,
+      description: 'User logged out',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
     return { message: 'Logged out successfully' };
   }
 }

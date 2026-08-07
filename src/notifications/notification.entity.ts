@@ -34,6 +34,7 @@ export class Notification {
   @Column({ nullable: true })
   readAt?: Date;
 
+  @Index()
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

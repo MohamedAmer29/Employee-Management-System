@@ -7,7 +7,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { JwtGuard } from '@/auth/guards/jwt.gaurd';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { NotificationsService } from './notifications.service';
@@ -22,7 +28,26 @@ export class NotificationsController {
   @Get()
   @ApiOperation({
     summary: 'Retrieve notifications for the authenticated user',
+    description:
+      'Returns paginated notifications belonging to the authenticated user. Users can only access their own notifications.',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Notifications retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   findAll(
     @CurrentUser('userId') userId: string,
     @Query('page') page = '1',
@@ -38,7 +63,26 @@ export class NotificationsController {
   @Get('unread')
   @ApiOperation({
     summary: 'Retrieve unread notifications for the authenticated user',
+    description:
+      'Returns paginated unread notifications belonging to the authenticated user. Users can only access their own notifications.',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Unread notifications retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   findUnread(
     @CurrentUser('userId') userId: string,
     @Query('page') page = '1',
@@ -52,13 +96,30 @@ export class NotificationsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Retrieve a specific notification' })
+  @ApiOperation({
+    summary: 'Retrieve a specific notification',
+    description:
+      'Returns a specific notification and marks it as read. Users can only access their own notifications.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification retrieved and marked as read',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
   findOne(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.notificationsService.markAsRead(id, userId);
   }
 
   @Patch(':id/read')
-  @ApiOperation({ summary: 'Mark a notification as read' })
+  @ApiOperation({
+    summary: 'Mark a notification as read',
+    description:
+      'Marks a specific notification as read. Users can only modify their own notifications.',
+  })
+  @ApiResponse({ status: 200, description: 'Notification marked as read' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
   markAsRead(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.notificationsService.markAsRead(id, userId);
   }
@@ -66,13 +127,27 @@ export class NotificationsController {
   @Patch('read-all')
   @ApiOperation({
     summary: 'Mark all notifications as read for the authenticated user',
+    description:
+      'Marks all unread notifications as read for the authenticated user.',
   })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   markAllAsRead(@CurrentUser('userId') userId: string) {
     return this.notificationsService.markAllAsRead(userId);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a notification' })
+  @ApiOperation({
+    summary: 'Delete a notification',
+    description:
+      'Deletes a specific notification. Users can only delete their own notifications.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification deleted successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
   delete(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.notificationsService.delete(id, userId);
   }

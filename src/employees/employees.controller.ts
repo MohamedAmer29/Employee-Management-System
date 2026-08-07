@@ -71,8 +71,12 @@ export class EmployeesController {
   @Put(':id')
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Update employee' })
-  update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
-    return this.employeesService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateEmployeeDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.employeesService.update(id, dto, userId);
   }
 
   @Delete(':id')

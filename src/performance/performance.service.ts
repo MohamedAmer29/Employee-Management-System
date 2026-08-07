@@ -14,7 +14,7 @@ import { Employee } from '../employees/entities/employee.entity';
 import { Role } from '../auth/interfaces/Role.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
-import { NotificationType } from '../notifications/enums/notification-type.enum';
+import { PerformanceReviewCreatedEvent } from '../common/events/performance-review-created.event';
 
 @Injectable()
 export class PerformanceService {
@@ -66,9 +66,10 @@ export class PerformanceService {
     });
 
     if (employeeUser) {
-      this.eventEmitter.emit('performance.created', {
-        userId: employeeUser.id,
-      });
+      this.eventEmitter.emit(
+        'performance.created',
+        new PerformanceReviewCreatedEvent(employeeUser.id, employee.fullName),
+      );
     }
 
     this.eventEmitter.emit('audit.log.created', {
