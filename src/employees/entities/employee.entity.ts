@@ -1,3 +1,4 @@
+import { Role } from '@/src/auth/interfaces/Role.enum';
 import { Attendance } from '@/src/attendance/entities/attendance.entity';
 import { Department } from '@/src/department/entities/department.entity';
 import { LeaveRequest } from '@/src/leave/entities/leave.entity';
@@ -32,8 +33,14 @@ export class Employee {
   @Column()
   position!: string;
 
-  @ManyToOne(() => Department, (dept) => dept.employees)
-  department!: Department;
+  @Column({ type: 'enum', enum: Role, nullable: true })
+  role!: Role;
+
+  @Column({ nullable: true })
+  profilePicture?: string;
+
+  @ManyToOne(() => Department, (dept) => dept.employees, { nullable: true })
+  department?: Department;
 
   @OneToMany(() => Attendance, (att) => att.employee)
   attendanceRecords!: Attendance[];

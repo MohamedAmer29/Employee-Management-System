@@ -14,6 +14,7 @@ import { UsersService } from './users.service';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtGuard } from '../auth/guards/jwt.gaurd';
 import { RolesGuard } from '../auth/guards/role.guard';
 import { Roles } from '../auth/role.decorator';
@@ -52,10 +53,38 @@ export class UsersController {
     return this.usersService.updateProfile(req.user.userId, dto);
   }
 
+  @Patch('me/password')
+  updateMyPassword(@Req() req: RequestWithUser, @Body() dto: ResetPasswordDto) {
+    return this.usersService.resetPassword(req.user.userId, dto);
+  }
+
+  @Patch('me/deactivate')
+  deactivateMe(@Req() req: RequestWithUser) {
+    return this.usersService.deactivate(req.user.userId);
+  }
+
   @Patch(':id')
   @Roles(Role.admin)
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
+  }
+
+  @Patch(':id/password')
+  @Roles(Role.admin)
+  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
+    return this.usersService.resetPassword(id, dto);
+  }
+
+  @Patch(':id/deactivate')
+  @Roles(Role.admin)
+  deactivate(@Param('id') id: string) {
+    return this.usersService.deactivate(id);
+  }
+
+  @Patch(':id/activate')
+  @Roles(Role.admin)
+  activate(@Param('id') id: string) {
+    return this.usersService.activate(id);
   }
 
   @Delete(':id')

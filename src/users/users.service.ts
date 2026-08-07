@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -7,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class UsersService {
@@ -64,11 +69,40 @@ export class UsersService {
 
     allowedFields.forEach((field) => {
       if (dto[field] !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         (user as any)[field] = dto[field];
       }
     });
 
+    return this.userRepository.save(user);
+  }
+
+  async resetPassword(id: string, dto: ResetPasswordDto) {
+    const user = await this.findOne(id);
+
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException(
+        'Password and confirm password do not match',
+      );
+    }
+
+    user.password = await bcrypt.hash(dto.password, 10);
+    // invalidate previous tokens
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+
+    return this.userRepository.save(user);
+  }
+
+  async deactivate(id: string) {
+    const user = await this.findOne(id);
+
+    user.isActive = false;
+    return this.userRepository.save(user);
+  }
+
+  async activate(id: string) {
+    const user = await this.findOne(id);
+
+    user.isActive = true;
     return this.userRepository.save(user);
   }
 

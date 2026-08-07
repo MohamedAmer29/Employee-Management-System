@@ -7,10 +7,6 @@ import { UsersModule } from './users/users.module';
 import { ManagersModule } from './managers/managers.module';
 import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
-import { DepartmentController } from './department/department.controller';
-import { DepartmentService } from './department/department.service';
-import { PerformanceService } from './performance/performance.service';
-import { PerformanceController } from './performance/performance.controller';
 import { DepartmentModule } from './department/department.module';
 import { PerformanceModule } from './performance/performance.module';
 import { AttendanceModule } from './attendance/attendance.module';
@@ -34,7 +30,5 @@ import { AttendanceModule } from './attendance/attendance.module';
     LeaveModule,
     PerformanceModule,
   ],
-  controllers: [DepartmentController, PerformanceController],
-  providers: [DepartmentService, PerformanceService],
 })
 export class AppModule {}

@@ -43,6 +43,9 @@ export class User {
   @Column({ default: 0 })
   tokenVersion!: number;
 
+  @Column({ default: true })
+  isActive!: boolean;
+
   @OneToOne(() => Employee, (employee) => employee.user)
   @JoinColumn()
   employee!: Employee;
