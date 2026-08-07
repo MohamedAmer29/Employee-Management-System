@@ -14,6 +14,24 @@ export class User {
   id!: string;
 
   @Column()
+  firstName!: string;
+
+  @Column()
+  lastName!: string;
+
+  @Column()
+  country!: string;
+
+  @Column()
+  city!: string;
+
+  @Column()
+  phoneNumber!: string;
+
+  @Column()
+  nationalId!: string;
+
+  @Column()
   username!: string;
 
   @Column()
