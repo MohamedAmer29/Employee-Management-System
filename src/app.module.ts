@@ -33,8 +33,6 @@ import { AttendanceModule } from './attendance/attendance.module';
     AttendanceModule,
     LeaveModule,
     PerformanceModule,
-    DepartmentModule,
-    PerformanceModule,
   ],
   controllers: [DepartmentController, PerformanceController],
   providers: [DepartmentService, PerformanceService],
