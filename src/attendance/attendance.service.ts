@@ -7,18 +7,16 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
-import { Employee } from '../employees/entities/employee.entity';
-import { User } from '../users/entities/user.entity';
+import { EmployeesService } from '../employees/employees.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AttendanceService {
   constructor(
     @InjectRepository(Attendance)
     private readonly attendanceRepository: Repository<Attendance>,
-    @InjectRepository(Employee)
-    private readonly employeeRepository: Repository<Employee>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly usersService: UsersService,
+    private readonly employeesService: EmployeesService,
   ) {}
 
   async checkIn(userId: string) {
@@ -81,13 +79,8 @@ export class AttendanceService {
   }
 
   async findByEmployee(employeeId: string) {
-    const employee = await this.employeeRepository.findOne({
-      where: { id: employeeId },
-    });
-
-    if (!employee) {
-      throw new NotFoundException('Employee not found');
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    await this.employeesService.findOne(employeeId);
 
     return this.attendanceRepository.find({
       where: { employee: { id: employeeId } },
@@ -96,10 +89,7 @@ export class AttendanceService {
   }
 
   private async getEmployeeForUser(userId: string) {
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['employee'],
-    });
+    const user = await this.usersService.findOne(userId);
 
     if (!user || !user.employee) {
       throw new NotFoundException('Employee record not found for current user');

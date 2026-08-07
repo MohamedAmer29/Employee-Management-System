@@ -79,6 +79,14 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1"
+    },
+    "globals": {
+      "ts-jest": {
+        "tsconfig": "<rootDir>/../tsconfig.json"
+      }
+    },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

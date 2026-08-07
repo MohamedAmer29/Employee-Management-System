@@ -1,9 +1,9 @@
-import { Role } from '@/src/auth/interfaces/Role.enum';
-import { Attendance } from '@/src/attendance/entities/attendance.entity';
-import { Department } from '@/src/department/entities/department.entity';
-import { LeaveRequest } from '@/src/leave/entities/leave.entity';
-import { PerformanceReview } from '@/src/performance/entities/performance';
-import { User } from '@/src/users/entities/user.entity';
+import { Role } from '@/auth/interfaces/Role.enum';
+import { Attendance } from '@/attendance/entities/attendance.entity';
+import { Department } from '@/department/entities/department.entity';
+import { LeaveRequest } from '@/leave/entities/leave.entity';
+import { PerformanceReview } from '@/performance/entities/performance';
+import { User } from '@/users/entities/user.entity';
 import {
   Column,
   Entity,

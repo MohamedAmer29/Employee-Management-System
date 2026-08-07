@@ -3,11 +3,15 @@ import { LeaveController } from './leave.controller';
 import { LeaveService } from './leave.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LeaveRequest } from './entities/leave.entity';
-import { Employee } from '../employees/entities/employee.entity';
-import { User } from '../users/entities/user.entity';
+import { UsersModule } from '../users/users.module';
+import { EmployeesModule } from '../employees/employees.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LeaveRequest, Employee, User])],
+  imports: [
+    TypeOrmModule.forFeature([LeaveRequest]),
+    UsersModule,
+    EmployeesModule,
+  ],
   controllers: [LeaveController],
   providers: [LeaveService],
 })

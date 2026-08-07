@@ -1,5 +1,5 @@
-import { Role } from '@/src/auth/interfaces/Role.enum';
-import { Employee } from '@/src/employees/entities/employee.entity';
+import { Role } from '@/auth/interfaces/Role.enum';
+import { Employee } from '@/employees/entities/employee.entity';
 import {
   Column,
   Entity,
