@@ -8,7 +8,6 @@ import {
   Param,
   Post,
   Put,
-  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -30,9 +29,7 @@ import { Role } from '../auth/interfaces/Role.enum';
 import { Roles } from '../auth/role.decorator';
 import { JwtGuard } from '../auth/guards/jwt.gaurd';
 import { RolesGuard } from '../auth/guards/role.guard';
-import type { Request } from 'express';
-
-type RequestWithUser = Request & { user: { userId: string } };
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 type UploadedProfilePictureFile = {
   fieldname: string;
@@ -139,9 +136,9 @@ export class EmployeesController {
   })
   @ApiOperation({ summary: 'Upload my profile picture' })
   uploadMyProfilePicture(
-    @Req() req: RequestWithUser,
+    @CurrentUser('userId') userId: string,
     @UploadedFile() file: UploadedProfilePictureFile,
   ) {
-    return this.employeesService.uploadMyProfilePicture(req.user.userId, file);
+    return this.employeesService.uploadMyProfilePicture(userId, file);
   }
 }

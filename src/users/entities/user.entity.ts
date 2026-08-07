@@ -1,9 +1,12 @@
 import { Role } from '@/auth/interfaces/Role.enum';
 import { Employee } from '@/employees/entities/employee.entity';
+import { AuditLog } from '@/audit-logs/audit-log.entity';
+import { Notification } from '@/notifications/notification.entity';
 import {
   Column,
   Entity,
   JoinColumn,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -49,4 +52,10 @@ export class User {
   @OneToOne(() => Employee, (employee) => employee.user)
   @JoinColumn()
   employee!: Employee;
+
+  @OneToMany(() => AuditLog, (auditLog) => auditLog.user)
+  auditLogs!: AuditLog[];
+
+  @OneToMany(() => Notification, (notification) => notification.user)
+  notifications!: Notification[];
 }

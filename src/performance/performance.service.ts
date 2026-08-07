@@ -12,6 +12,9 @@ import { UpdatePerformanceDto } from './dto/update-performance.dto';
 import { User } from '../users/entities/user.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { Role } from '../auth/interfaces/Role.enum';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { NotificationType } from '../notifications/enums/notification-type.enum';
 
 @Injectable()
 export class PerformanceService {
@@ -22,6 +25,7 @@ export class PerformanceService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(userId: string, dto: CreatePerformanceDto) {
@@ -55,7 +59,32 @@ export class PerformanceService {
       reviewDate,
     });
 
-    return this.performanceRepository.save(review);
+    const savedReview = await this.performanceRepository.save(review);
+
+    const employeeUser = await this.userRepository.findOne({
+      where: { employee: { id: employee.id } },
+    });
+
+    if (employeeUser) {
+      this.eventEmitter.emit('performance.created', {
+        userId: employeeUser.id,
+      });
+    }
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.CREATE,
+      entity: 'PerformanceReview',
+      entityId: String(savedReview.id),
+      description: 'Created a performance review',
+      newValues: {
+        employeeId: employee.id,
+        rating: dto.rating,
+        feedback: dto.feedback,
+      },
+    });
+
+    return savedReview;
   }
 
   async findAll(role: Role, userId: string) {

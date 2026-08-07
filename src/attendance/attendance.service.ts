@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { EmployeesService } from '../employees/employees.service';
 import { UsersService } from '../users/users.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 
 @Injectable()
 export class AttendanceService {
@@ -17,6 +19,7 @@ export class AttendanceService {
     private readonly attendanceRepository: Repository<Attendance>,
     private readonly usersService: UsersService,
     private readonly employeesService: EmployeesService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async checkIn(userId: string) {
@@ -33,7 +36,15 @@ export class AttendanceService {
       }
       existing.checkIn = this.getCurrentTime();
       existing.isPresent = true;
-      return this.attendanceRepository.save(existing);
+      const savedAttendance = await this.attendanceRepository.save(existing);
+      this.eventEmitter.emit('audit.log.created', {
+        userId,
+        action: AuditAction.CHECK_IN,
+        entity: 'Attendance',
+        entityId: String(savedAttendance.id),
+        description: 'Employee checked in',
+      });
+      return savedAttendance;
     }
 
     const attendance = this.attendanceRepository.create({
@@ -43,7 +54,16 @@ export class AttendanceService {
       isPresent: true,
     });
 
-    return this.attendanceRepository.save(attendance);
+    const savedAttendance = await this.attendanceRepository.save(attendance);
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.CHECK_IN,
+      entity: 'Attendance',
+      entityId: String(savedAttendance.id),
+      description: 'Employee checked in',
+    });
+
+    return savedAttendance;
   }
 
   async checkOut(userId: string) {
@@ -64,6 +84,14 @@ export class AttendanceService {
 
     attendance.checkOut = this.getCurrentTime();
     await this.attendanceRepository.save(attendance);
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.CHECK_OUT,
+      entity: 'Attendance',
+      entityId: String(attendance.id),
+      description: 'Employee checked out',
+    });
 
     return {
       ...attendance,

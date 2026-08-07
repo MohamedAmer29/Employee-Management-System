@@ -12,6 +12,9 @@ import { LeaveStatus } from './interfaces/leave.status';
 import { User } from '../users/entities/user.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { Role } from '../auth/interfaces/Role.enum';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { NotificationType } from '../notifications/enums/notification-type.enum';
 
 const ANNUAL_LEAVE_DAYS = 20;
 
@@ -24,6 +27,7 @@ export class LeaveService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async requestLeave(userId: string, dto: CreateLeaveDto) {
@@ -49,10 +53,28 @@ export class LeaveService {
 
     const result = await this.leaveRepository.save(leave);
     this.notifyManager(employee, result);
+    this.eventEmitter.emit('leave.created', {
+      userId,
+      employeeId: employee.id,
+      leaveId: result.id,
+    });
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.CREATE,
+      entity: 'LeaveRequest',
+      entityId: String(result.id),
+      description: 'Employee created a leave request',
+      newValues: {
+        reason: dto.reason,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        status: LeaveStatus.PENDING,
+      },
+    });
     return result;
   }
 
-  async updateLeaveStatus(id: string, status: LeaveStatus) {
+  async updateLeaveStatus(id: string, status: LeaveStatus, userId?: string) {
     const leave = await this.leaveRepository.findOne({
       where: { id: Number(id) },
       relations: ['employee'],
@@ -66,9 +88,40 @@ export class LeaveService {
       throw new BadRequestException(`Leave request is already ${status}`);
     }
 
+    const previousStatus = leave.status;
     leave.status = status;
     const updatedLeave = await this.leaveRepository.save(leave);
     this.notifyManager(leave.employee, updatedLeave, status);
+    const employeeUser = await this.userRepository.findOne({
+      where: { employee: { id: leave.employee.id } },
+    });
+    if (employeeUser) {
+      this.eventEmitter.emit('notification.created', {
+        userId: employeeUser.id,
+        type:
+          status === LeaveStatus.APPROVED
+            ? NotificationType.LEAVE_APPROVED
+            : NotificationType.LEAVE_REJECTED,
+        title:
+          status === LeaveStatus.APPROVED ? 'Leave approved' : 'Leave rejected',
+        message:
+          status === LeaveStatus.APPROVED
+            ? 'Your leave request has been approved.'
+            : 'Your leave request has been rejected.',
+      });
+    }
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action:
+        status === LeaveStatus.APPROVED
+          ? AuditAction.APPROVE
+          : AuditAction.REJECT,
+      entity: 'LeaveRequest',
+      entityId: String(updatedLeave.id),
+      description: `Leave request ${status.toLowerCase()}`,
+      oldValues: { status: previousStatus },
+      newValues: { status },
+    });
     return updatedLeave;
   }
 

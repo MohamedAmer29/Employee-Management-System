@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -17,9 +16,7 @@ import { JwtGuard } from '../auth/guards/jwt.gaurd';
 import { RolesGuard } from '../auth/guards/role.guard';
 import { Roles } from '../auth/role.decorator';
 import { Role } from '../auth/interfaces/Role.enum';
-import type { Request } from 'express';
-
-type RequestWithUser = Request & { user: { userId: string; role: Role } };
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Performance')
 @ApiBearerAuth('Authorization')
@@ -31,15 +28,21 @@ export class PerformanceController {
   @Post()
   @Roles(Role.admin, Role.manager)
   @ApiOperation({ summary: 'Create performance review' })
-  create(@Req() req: RequestWithUser, @Body() dto: CreatePerformanceDto) {
-    return this.performanceService.create(req.user.userId, dto);
+  create(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CreatePerformanceDto,
+  ) {
+    return this.performanceService.create(userId, dto);
   }
 
   @Get()
   @Roles(Role.admin, Role.manager, Role.employee)
   @ApiOperation({ summary: 'Get performance reviews' })
-  findAll(@Req() req: RequestWithUser) {
-    return this.performanceService.findAll(req.user.role, req.user.userId);
+  findAll(
+    @CurrentUser('role') role: Role,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.performanceService.findAll(role, userId);
   }
 
   @Patch(':id')

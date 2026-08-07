@@ -10,10 +10,14 @@ import { LeaveModule } from './leave/leave.module';
 import { DepartmentModule } from './department/department.module';
 import { PerformanceModule } from './performance/performance.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
     AuthModule,
+    EventEmitterModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -29,6 +33,8 @@ import { AttendanceModule } from './attendance/attendance.module';
     AttendanceModule,
     LeaveModule,
     PerformanceModule,
+    AuditLogsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

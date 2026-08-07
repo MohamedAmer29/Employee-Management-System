@@ -16,6 +16,8 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './dto/register.dto';
 import type { Request, Response } from 'express';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +25,7 @@ export class AuthService {
     @InjectRepository(User) private userRepository: Repository<User>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async register(
@@ -92,6 +95,20 @@ export class AuthService {
       maxAge: this.getRefreshTokenMaxAge(),
     });
 
+    this.eventEmitter.emit('audit.log.created', {
+      userId: newUser.id,
+      action: AuditAction.CREATE,
+      entity: 'User',
+      entityId: String(newUser.id),
+      description: 'User registered an account',
+      newValues: {
+        username: newUser.username,
+        role: newUser.role,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
     return {
       message: 'User registered successfully',
       accessToken,
@@ -104,10 +121,30 @@ export class AuthService {
       where: { username },
       relations: ['employee'],
     });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      this.eventEmitter.emit('audit.log.created', {
+        action: AuditAction.LOGIN_FAILED,
+        entity: 'User',
+        description: 'Failed login attempt for unknown user',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) throw new UnauthorizedException('Invalid credentials');
+    if (!isMatch) {
+      this.eventEmitter.emit('audit.log.created', {
+        userId: user.id,
+        action: AuditAction.LOGIN_FAILED,
+        entity: 'User',
+        entityId: String(user.id),
+        description: 'Failed login attempt for existing user',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const payload = {
       sub: user.id,
@@ -124,6 +161,16 @@ export class AuthService {
       secure: false,
       sameSite: 'lax',
       maxAge: this.getRefreshTokenMaxAge(),
+    });
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId: user.id,
+      action: AuditAction.LOGIN,
+      entity: 'User',
+      entityId: String(user.id),
+      description: 'User logged in successfully',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
     });
 
     return { accessToken };

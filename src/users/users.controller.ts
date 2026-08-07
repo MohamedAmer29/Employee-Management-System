@@ -6,7 +6,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  Req,
   Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -19,9 +18,7 @@ import { JwtGuard } from '../auth/guards/jwt.gaurd';
 import { RolesGuard } from '../auth/guards/role.guard';
 import { Roles } from '../auth/role.decorator';
 import { Role } from '../auth/interfaces/Role.enum';
-import type { Request } from 'express';
-
-type RequestWithUser = Request & { user: { userId: string } };
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth('Authorization')
@@ -49,18 +46,24 @@ export class UsersController {
   }
 
   @Patch('me')
-  updateMe(@Req() req: RequestWithUser, @Body() dto: UpdateProfileDto) {
-    return this.usersService.updateProfile(req.user.userId, dto);
+  updateMe(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.usersService.updateProfile(userId, dto);
   }
 
   @Patch('me/password')
-  updateMyPassword(@Req() req: RequestWithUser, @Body() dto: ResetPasswordDto) {
-    return this.usersService.resetPassword(req.user.userId, dto);
+  updateMyPassword(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    return this.usersService.resetPassword(userId, dto);
   }
 
   @Patch('me/deactivate')
-  deactivateMe(@Req() req: RequestWithUser) {
-    return this.usersService.deactivate(req.user.userId);
+  deactivateMe(@CurrentUser('userId') userId: string) {
+    return this.usersService.deactivate(userId);
   }
 
   @Patch(':id')

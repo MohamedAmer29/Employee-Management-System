@@ -1,13 +1,11 @@
-import { Controller, Get, Post, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { JwtGuard } from '../auth/guards/jwt.gaurd';
 import { RolesGuard } from '../auth/guards/role.guard';
 import { Roles } from '../auth/role.decorator';
 import { Role } from '../auth/interfaces/Role.enum';
-import type { Request } from 'express';
-
-type RequestWithUser = Request & { user: { userId: string } };
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Attendance')
 @ApiBearerAuth('Authorization')
@@ -19,15 +17,15 @@ export class AttendanceController {
   @Post('check-in')
   @Roles(Role.employee)
   @ApiOperation({ summary: 'Employee check-in for today' })
-  checkIn(@Req() req: RequestWithUser) {
-    return this.attendanceService.checkIn(req.user.userId);
+  checkIn(@CurrentUser('userId') userId: string) {
+    return this.attendanceService.checkIn(userId);
   }
 
   @Post('check-out')
   @Roles(Role.employee)
   @ApiOperation({ summary: 'Employee check-out for today' })
-  checkOut(@Req() req: RequestWithUser) {
-    return this.attendanceService.checkOut(req.user.userId);
+  checkOut(@CurrentUser('userId') userId: string) {
+    return this.attendanceService.checkOut(userId);
   }
 
   @Get()
