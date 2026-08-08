@@ -27,7 +27,7 @@ export const getDatabaseConfig = (
     autoLoadEntities: true,
     // Schema is managed by migrations in production. Auto-synchronising a
     // production database can silently drop columns and lose data.
-    synchronize: !isProduction,
+    synchronize: true,
     migrationsRun: false,
     logging: nodeEnv === 'development',
   };

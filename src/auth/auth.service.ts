@@ -437,6 +437,15 @@ export class AuthService {
       maxAge: this.getRefreshTokenMaxAge(),
     });
 
+    // Readable marker so the frontend can detect a session exists without
+    // touching the httpOnly refresh token. Never carries the token itself.
+    res.cookie('refresh_token_present', '1', {
+      httpOnly: false,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.getRefreshTokenMaxAge(),
+    });
+
     return sessionId;
   }
 
@@ -460,6 +469,7 @@ export class AuthService {
 
     // 1. Clear the HTTP-only cookies.
     res.clearCookie('refresh_token');
+    res.clearCookie('refresh_token_present');
     res.clearCookie('access_token');
 
     // 2. Revoke the Redis session entry so the refresh token cannot be reused.
@@ -496,6 +506,7 @@ export class AuthService {
     }
 
     res.clearCookie('refresh_token');
+    res.clearCookie('refresh_token_present');
     res.clearCookie('access_token');
 
     this.eventEmitter.emit('audit.log.created', {

@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { LeaveStatus } from '../interfaces/leave.status';
 
-@Entity()
+@Entity('leave_request')
 export class LeaveRequest {
   @PrimaryGeneratedColumn()
   id!: number;

@@ -7,7 +7,7 @@ import {
   Index,
 } from 'typeorm';
 
-@Entity()
+@Entity('performance_review')
 export class PerformanceReview {
   @PrimaryGeneratedColumn()
   id!: string;

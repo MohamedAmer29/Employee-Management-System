@@ -27,6 +27,14 @@ export function configureApp(app: INestApplication): void {
 
   app.use(cookieParser());
 
+  // CORS for local Vite dev server (port 5173) + credentials (cookies)
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
   const config = new DocumentBuilder()
     .setTitle('EMS API')
     .setDescription('The EMS API description')
