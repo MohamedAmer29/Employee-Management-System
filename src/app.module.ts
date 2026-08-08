@@ -14,12 +14,15 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { RedisModule } from './redis/redis.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    RedisModule,
     AuthModule,
     EventEmitterModule.forRoot(),
-    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -37,6 +40,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AuditLogsModule,
     NotificationsModule,
     DashboardModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

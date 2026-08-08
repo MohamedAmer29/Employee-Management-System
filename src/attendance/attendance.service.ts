@@ -11,6 +11,7 @@ import { EmployeesService } from '../employees/employees.service';
 import { UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AttendanceRecordedEvent } from '../common/events/attendance-recorded.event';
 
 @Injectable()
 export class AttendanceService {
@@ -44,6 +45,14 @@ export class AttendanceService {
         entityId: String(savedAttendance.id),
         description: 'Employee checked in',
       });
+      this.eventEmitter.emit(
+        'attendance.recorded',
+        new AttendanceRecordedEvent(
+          userId,
+          employee.id,
+          String(savedAttendance.id),
+        ),
+      );
       return savedAttendance;
     }
 
@@ -62,6 +71,14 @@ export class AttendanceService {
       entityId: String(savedAttendance.id),
       description: 'Employee checked in',
     });
+    this.eventEmitter.emit(
+      'attendance.recorded',
+      new AttendanceRecordedEvent(
+        userId,
+        employee.id,
+        String(savedAttendance.id),
+      ),
+    );
 
     return savedAttendance;
   }
@@ -92,6 +109,10 @@ export class AttendanceService {
       entityId: String(attendance.id),
       description: 'Employee checked out',
     });
+    this.eventEmitter.emit(
+      'attendance.recorded',
+      new AttendanceRecordedEvent(userId, employee.id, String(attendance.id)),
+    );
 
     return {
       ...attendance,

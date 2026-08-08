@@ -41,6 +41,8 @@ import {
 } from './interfaces/employee-dashboard.interface';
 import { DashboardPeriod } from './enums/dashboard-period.enum';
 import { LeaveStatus } from '@/leave/interfaces/leave.status';
+import { RedisService } from '@/redis/redis.service';
+import { CACHE_TTL, RedisKeys } from '@/redis/redis.constants';
 
 @Injectable()
 export class DashboardService {
@@ -61,9 +63,25 @@ export class DashboardService {
     private readonly departmentRepository: Repository<Department>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly redisService: RedisService,
   ) {}
 
+  /**
+   * Admin dashboard is the most expensive query in the system (7 aggregate
+   * queries). It is cached for CACHE_TTL.DASHBOARD seconds behind a Redis lock
+   * so a cache expiry never causes a stampede of concurrent PostgreSQL scans.
+   */
   async getAdminDashboard(): Promise<AdminDashboardData> {
+    return this.redisService.rememberWithLock<AdminDashboardData>(
+      RedisKeys.dashboardAdmin(),
+      RedisKeys.dashboardLock('admin'),
+      CACHE_TTL.DASHBOARD,
+      () => this.buildAdminDashboard(),
+      CACHE_TTL.LOCK,
+    );
+  }
+
+  private async buildAdminDashboard(): Promise<AdminDashboardData> {
     const [
       employeeStats,
       departmentStats,
@@ -94,6 +112,20 @@ export class DashboardService {
   }
 
   async getAdminAttendanceTrend(
+    period: DashboardPeriod,
+  ): Promise<{ attendanceTrend: AttendanceTrend[] }> {
+    return this.redisService.rememberWithLock<{
+      attendanceTrend: AttendanceTrend[];
+    }>(
+      RedisKeys.dashboardAdminTrend(period),
+      RedisKeys.dashboardLock(`admin:${period}`),
+      CACHE_TTL.DASHBOARD_TREND,
+      () => this.buildAdminAttendanceTrend(period),
+      CACHE_TTL.LOCK,
+    );
+  }
+
+  private async buildAdminAttendanceTrend(
     period: DashboardPeriod,
   ): Promise<{ attendanceTrend: AttendanceTrend[] }> {
     const queryBuilder = this.attendanceRepository
@@ -148,6 +180,18 @@ export class DashboardService {
   }
 
   async getManagerDashboard(userId: string): Promise<ManagerDashboardData> {
+    return this.redisService.rememberWithLock<ManagerDashboardData>(
+      RedisKeys.dashboardManager(userId),
+      RedisKeys.dashboardLock(`manager:${userId}`),
+      CACHE_TTL.DASHBOARD,
+      () => this.buildManagerDashboard(userId),
+      CACHE_TTL.LOCK,
+    );
+  }
+
+  private async buildManagerDashboard(
+    userId: string,
+  ): Promise<ManagerDashboardData> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['employee', 'employee.department'],
@@ -186,6 +230,16 @@ export class DashboardService {
   }
 
   async getEmployeeDashboard(userId: string): Promise<EmployeeDashboardData> {
+    return this.redisService.remember<EmployeeDashboardData>(
+      RedisKeys.dashboardEmployee(userId),
+      CACHE_TTL.DASHBOARD,
+      () => this.buildEmployeeDashboard(userId),
+    );
+  }
+
+  private async buildEmployeeDashboard(
+    userId: string,
+  ): Promise<EmployeeDashboardData> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['employee', 'employee.department'],

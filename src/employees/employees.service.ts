@@ -24,6 +24,9 @@ import { Role } from '../auth/interfaces/Role.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { EmployeeUpdatedEvent } from '../common/events/employee-updated.event';
+import { RedisService } from '../redis/redis.service';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
+import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -37,6 +40,8 @@ export class EmployeesService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly redisService: RedisService,
+    private readonly cacheInvalidation: CacheInvalidationService,
   ) {}
 
   async create(dto: CreateEmployeeDto) {
@@ -65,16 +70,62 @@ export class EmployeesService {
       await this.assignUser(savedEmployee.id, dto.userId);
     }
 
+    await this.cacheInvalidation.onEmployeeChanged(
+      savedEmployee.id,
+      dto.userId,
+    );
+
     return this.findOne(savedEmployee.id);
   }
 
-  findAll() {
-    return this.employeeRepository.find({
-      relations: ['department', 'user'],
-    });
+  findAll(): Promise<Employee[]> {
+    return this.redisService.remember(
+      RedisKeys.employeesList(),
+      CACHE_TTL.EMPLOYEES_LIST,
+      () =>
+        this.employeeRepository.find({
+          relations: ['department', 'user'],
+        }),
+    );
   }
 
-  async findOne(id: string) {
+  /**
+   * Cache-aside read. On a cache hit the cached employee is returned, on a miss
+   * PostgreSQL is queried and the result stored for CACHE_TTL.EMPLOYEE seconds.
+   * If Redis is unavailable the query falls through to PostgreSQL transparently.
+   */
+  async findOne(id: string): Promise<Employee> {
+    const cached = await this.redisService.getJson<Employee>(
+      RedisKeys.employee(id),
+    );
+
+    if (cached) {
+      return cached;
+    }
+
+    const employee = await this.employeeRepository.findOne({
+      where: { id },
+      relations: ['department', 'user'],
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    await this.redisService.setJson(
+      RedisKeys.employee(id),
+      this.toCacheable(employee),
+      CACHE_TTL.EMPLOYEE,
+    );
+
+    return employee;
+  }
+
+  /**
+   * Always reads from PostgreSQL. Used by write paths so mutations never
+   * operate on a cached (possibly detached) entity.
+   */
+  private async findOneFresh(id: string): Promise<Employee> {
     const employee = await this.employeeRepository.findOne({
       where: { id },
       relations: ['department', 'user'],
@@ -87,8 +138,27 @@ export class EmployeesService {
     return employee;
   }
 
+  /**
+   * Strips the password hash from the nested user relation before caching.
+   * Credentials must never be written to Redis.
+   */
+  private toCacheable(employee: Employee): Employee {
+    if (!employee.user) {
+      return employee;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...safeUser } = employee.user;
+
+    return {
+      ...employee,
+      user: safeUser as User,
+    };
+  }
+
   async update(id: string, dto: UpdateEmployeeDto, userId?: string) {
-    const employee = await this.findOne(id);
+    const employee = await this.findOneFresh(id);
+    const previousDepartmentId = employee.department?.id;
 
     const oldValues: Record<string, unknown> = {};
     if (dto.fullName) oldValues.fullName = employee.fullName;
@@ -114,6 +184,16 @@ export class EmployeesService {
       where: { employee: { id: employee.id } },
     });
 
+    await this.cacheInvalidation.onEmployeeChanged(id, employeeUser?.id);
+
+    if (dto.departmentId && dto.departmentId !== previousDepartmentId) {
+      await this.cacheInvalidation.onDepartmentChanged(dto.departmentId);
+
+      if (previousDepartmentId) {
+        await this.cacheInvalidation.invalidateDepartment(previousDepartmentId);
+      }
+    }
+
     if (employeeUser) {
       this.eventEmitter.emit(
         'employee.updated',
@@ -135,13 +215,24 @@ export class EmployeesService {
   }
 
   async remove(id: string) {
-    const employee = await this.findOne(id);
+    const employee = await this.findOneFresh(id);
+    const departmentId = employee.department?.id;
+    const employeeUserId = employee.user?.id;
+
     await this.employeeRepository.remove(employee);
+
+    await this.cacheInvalidation.onEmployeeChanged(id, employeeUserId);
+
+    if (departmentId) {
+      await this.cacheInvalidation.invalidateDepartment(departmentId);
+    }
+
     return { message: 'Employee deleted' };
   }
 
   async assignDepartment(id: string, departmentId: string) {
-    const employee = await this.findOne(id);
+    const employee = await this.findOneFresh(id);
+    const previousDepartmentId = employee.department?.id;
     const department = await this.departmentRepository.findOne({
       where: { id: departmentId },
     });
@@ -151,11 +242,20 @@ export class EmployeesService {
     }
 
     employee.department = department;
-    return this.employeeRepository.save(employee);
+    const saved = await this.employeeRepository.save(employee);
+
+    await this.cacheInvalidation.onEmployeeChanged(id, employee.user?.id);
+    await this.cacheInvalidation.onDepartmentChanged(departmentId);
+
+    if (previousDepartmentId && previousDepartmentId !== departmentId) {
+      await this.cacheInvalidation.invalidateDepartment(previousDepartmentId);
+    }
+
+    return saved;
   }
 
   async assignUser(id: string, userId: string) {
-    const employee = await this.findOne(id);
+    const employee = await this.findOneFresh(id);
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
@@ -175,11 +275,15 @@ export class EmployeesService {
     employee.user = user;
     user.employee = employee;
     await this.userRepository.save(user);
-    return this.employeeRepository.save(employee);
+    const saved = await this.employeeRepository.save(employee);
+
+    await this.cacheInvalidation.onEmployeeChanged(id, userId);
+
+    return saved;
   }
 
   async uploadProfilePicture(id: string, file: UploadedProfilePictureFile) {
-    const employee = await this.findOne(id);
+    const employee = await this.findOneFresh(id);
 
     return this.saveProfilePicture(employee, file);
   }
@@ -232,6 +336,8 @@ export class EmployeesService {
 
     employee.profilePicture = `/uploads/profile-pictures/${fileName}`;
     await this.employeeRepository.save(employee);
+
+    await this.cacheInvalidation.invalidateEmployee(employee.id);
 
     return employee;
   }

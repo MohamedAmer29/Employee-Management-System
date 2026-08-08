@@ -8,6 +8,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable lifecycle hooks so Redis (RedisService.onApplicationShutdown) and
+  // the TypeORM connection are closed gracefully on SIGINT/SIGTERM.
+  app.enableShutdownHooks();
+
   // Configure ValidationPipe globally
   app.useGlobalPipes(
     new ValidationPipe({

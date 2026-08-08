@@ -10,6 +10,7 @@ import { Notification } from '@/notifications/notification.entity';
 import { AuditLog } from '@/audit-logs/audit-log.entity';
 import { Department } from '@/department/entities/department.entity';
 import { User } from '@/users/entities/user.entity';
+import { DashboardCacheListener } from './dashboard-cache.listener';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { User } from '@/users/entities/user.entity';
     ]),
   ],
   controllers: [DashboardController],
-  providers: [DashboardService],
+  providers: [DashboardService, DashboardCacheListener],
   exports: [DashboardService],
 })
 export class DashboardModule {}

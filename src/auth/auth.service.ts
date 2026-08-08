@@ -18,6 +18,8 @@ import { RegisterDto } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { SessionService } from './session.service';
+import { LoginProtectionService } from './login-protection.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +28,8 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly sessionService: SessionService,
+    private readonly loginProtection: LoginProtectionService,
   ) {}
 
   async register(
@@ -88,12 +92,7 @@ export class AuthService {
       expiresIn: '15m',
     });
 
-    res.cookie('refresh_token', this.getRefreshToken(payload), {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      maxAge: this.getRefreshTokenMaxAge(),
-    });
+    await this.issueRefreshSession(newUser.id, payload, req, res);
 
     this.eventEmitter.emit('audit.log.created', {
       userId: newUser.id,
@@ -117,11 +116,16 @@ export class AuthService {
 
   async login(username: string, password: string, res: Response, req: Request) {
     this.ensureNoActiveSession(req);
+
+    const ip = this.resolveIp(req);
+    await this.loginProtection.assertNotLocked(ip, username);
+
     const user = await this.userRepository.findOne({
       where: { username },
       relations: ['employee'],
     });
     if (!user) {
+      await this.loginProtection.registerFailure(ip, username);
       this.eventEmitter.emit('audit.log.created', {
         action: AuditAction.LOGIN_FAILED,
         entity: 'User',
@@ -134,6 +138,7 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      await this.loginProtection.registerFailure(ip, username);
       this.eventEmitter.emit('audit.log.created', {
         userId: user.id,
         action: AuditAction.LOGIN_FAILED,
@@ -146,6 +151,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    await this.loginProtection.clearFailures(ip, username);
+
     const payload = {
       sub: user.id,
       role: user.role,
@@ -156,12 +163,7 @@ export class AuthService {
       expiresIn: '15m',
     });
 
-    res.cookie('refresh_token', this.getRefreshToken(payload), {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      maxAge: this.getRefreshTokenMaxAge(),
-    });
+    await this.issueRefreshSession(user.id, payload, req, res);
 
     this.eventEmitter.emit('audit.log.created', {
       userId: user.id,
@@ -176,7 +178,11 @@ export class AuthService {
     return { accessToken };
   }
 
-  async refreshToken(refreshToken: string | undefined, res: Response) {
+  async refreshToken(
+    refreshToken: string | undefined,
+    res: Response,
+    req?: Request,
+  ) {
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is required');
     }
@@ -198,6 +204,25 @@ export class AuthService {
         throw new UnauthorizedException('Refresh token is no longer valid');
       }
 
+      // Server-side session check. Redis is authoritative for revocation:
+      // a session that was logged out cannot be refreshed even while the JWT
+      // itself is still cryptographically valid.
+      const sessionId: string | undefined = payload.sid;
+
+      if (sessionId) {
+        const isValidSession = await this.sessionService.validateSession(
+          String(payload.sub),
+          sessionId,
+          refreshToken,
+        );
+
+        if (isValidSession === false) {
+          throw new UnauthorizedException(
+            'Session has been revoked. Please login again.',
+          );
+        }
+      }
+
       user.tokenVersion += 1;
       await this.userRepository.save(user);
 
@@ -211,12 +236,13 @@ export class AuthService {
         expiresIn: '15m',
       });
 
-      res.cookie('refresh_token', this.getRefreshToken(accessPayload), {
-        httpOnly: true,
-        secure: false,
-        sameSite: 'lax',
-        maxAge: this.getRefreshTokenMaxAge(),
-      });
+      await this.issueRefreshSession(
+        String(user.id),
+        accessPayload,
+        req,
+        res,
+        sessionId,
+      );
 
       return { message: 'Token refreshed successfully', accessToken };
     } catch (error: any) {
@@ -326,9 +352,64 @@ export class AuthService {
     return 7 * 24 * 60 * 60 * 1000;
   }
 
-  logout(res: Response, req: Request) {
+  private getRefreshTokenTtlSeconds(): number {
+    return Math.floor(this.getRefreshTokenMaxAge() / 1000);
+  }
+
+  private resolveIp(req: Request): string {
+    const forwarded = req.headers['x-forwarded-for'];
+
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      return forwarded.split(',')[0].trim();
+    }
+
+    return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  }
+
+  /**
+   * Signs a refresh token bound to a session id, registers the session in
+   * Redis (hashed token only) and sets the HTTP-only refresh cookie.
+   * The access token stays in the response body / access_token cookie exactly
+   * as before - nothing is moved to localStorage.
+   */
+  private async issueRefreshSession(
+    userId: string,
+    payload: Record<string, unknown>,
+    req: Request | undefined,
+    res: Response,
+    existingSessionId?: string,
+  ): Promise<string> {
+    const sessionId =
+      existingSessionId ?? this.sessionService.generateSessionId();
+    const ttlSeconds = this.getRefreshTokenTtlSeconds();
+
+    const refreshToken = this.getRefreshToken({ ...payload, sid: sessionId });
+
+    await this.sessionService.createSession(
+      {
+        userId,
+        refreshToken,
+        ttlSeconds,
+        ipAddress: req ? this.resolveIp(req) : undefined,
+        userAgent: req?.get('user-agent') ?? undefined,
+      },
+      sessionId,
+    );
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.getRefreshTokenMaxAge(),
+    });
+
+    return sessionId;
+  }
+
+  async logout(res: Response, req: Request) {
     const refreshToken = req.cookies?.refresh_token;
     let userId: string | undefined;
+    let sessionId: string | undefined;
 
     if (refreshToken) {
       try {
@@ -337,12 +418,20 @@ export class AuthService {
           secret: this.getRefreshSecret(),
         });
         userId = payload.sub;
+        sessionId = payload.sid;
       } catch {
         // Token is invalid, proceed with logout without userId
       }
     }
 
+    // 1. Clear the HTTP-only cookies.
     res.clearCookie('refresh_token');
+    res.clearCookie('access_token');
+
+    // 2. Revoke the Redis session entry so the refresh token cannot be reused.
+    if (userId && sessionId) {
+      await this.sessionService.revokeSession(userId, sessionId);
+    }
 
     this.eventEmitter.emit('audit.log.created', {
       userId,
@@ -355,5 +444,52 @@ export class AuthService {
     });
 
     return { message: 'Logged out successfully' };
+  }
+
+  /**
+   * Revokes every active session for the authenticated user.
+   * The user's tokenVersion is also bumped so already-issued access tokens are
+   * rejected immediately by JwtStrategy, even if Redis is unavailable.
+   */
+  async logoutAll(userId: string, res: Response, req: Request) {
+    const revokedSessions = await this.sessionService.revokeAllSessions(userId);
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (user) {
+      user.tokenVersion += 1;
+      await this.userRepository.save(user);
+    }
+
+    res.clearCookie('refresh_token');
+    res.clearCookie('access_token');
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.LOGOUT,
+      entity: 'User',
+      entityId: userId,
+      description: 'User logged out from all devices',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    return {
+      message: 'Logged out from all devices successfully',
+      revokedSessions,
+    };
+  }
+
+  /**
+   * Lists the active Redis sessions for the authenticated user.
+   * Only non-sensitive metadata is returned.
+   */
+  async getActiveSessions(userId: string) {
+    const sessions = await this.sessionService.listSessions(userId);
+
+    return {
+      total: sessions.length,
+      sessions,
+    };
   }
 }

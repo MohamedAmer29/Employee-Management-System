@@ -9,6 +9,9 @@ import { Department } from './entities/department.entity';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { Employee } from '../employees/entities/employee.entity';
+import { RedisService } from '../redis/redis.service';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
+import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
 
 @Injectable()
 export class DepartmentService {
@@ -17,20 +20,54 @@ export class DepartmentService {
     private readonly departmentRepository: Repository<Department>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    private readonly redisService: RedisService,
+    private readonly cacheInvalidation: CacheInvalidationService,
   ) {}
 
   async create(dto: CreateDepartmentDto) {
     await this.ensureNameIsUnique(dto.name);
 
     const department = this.departmentRepository.create(dto);
-    return this.departmentRepository.save(department);
+    const saved = await this.departmentRepository.save(department);
+
+    await this.cacheInvalidation.onDepartmentChanged(saved.id);
+
+    return saved;
   }
 
-  findAll() {
-    return this.departmentRepository.find({ relations: ['employees'] });
+  findAll(): Promise<Department[]> {
+    return this.redisService.remember(
+      RedisKeys.departmentsList(),
+      CACHE_TTL.DEPARTMENTS_LIST,
+      () => this.departmentRepository.find({ relations: ['employees'] }),
+    );
   }
 
-  async findOne(id: string) {
+  /**
+   * Cache-aside read for a single department. Falls back to PostgreSQL on a
+   * cache miss or whenever Redis is unavailable.
+   */
+  async findOne(id: string): Promise<Department> {
+    const cached = await this.redisService.getJson<Department>(
+      RedisKeys.department(id),
+    );
+
+    if (cached) {
+      return cached;
+    }
+
+    const department = await this.findOneFresh(id);
+
+    await this.redisService.setJson(
+      RedisKeys.department(id),
+      department,
+      CACHE_TTL.DEPARTMENT,
+    );
+
+    return department;
+  }
+
+  private async findOneFresh(id: string): Promise<Department> {
     const department = await this.departmentRepository.findOne({
       where: { id },
       relations: ['employees'],
@@ -44,18 +81,22 @@ export class DepartmentService {
   }
 
   async update(id: string, dto: UpdateDepartmentDto) {
-    const department = await this.findOne(id);
+    const department = await this.findOneFresh(id);
 
     if (dto.name && dto.name !== department.name) {
       await this.ensureNameIsUnique(dto.name, id);
     }
 
     Object.assign(department, dto);
-    return this.departmentRepository.save(department);
+    const saved = await this.departmentRepository.save(department);
+
+    await this.cacheInvalidation.onDepartmentChanged(id);
+
+    return saved;
   }
 
   async assignEmployees(id: string, employeeIds: string[]) {
-    const department = await this.findOne(id);
+    const department = await this.findOneFresh(id);
 
     if (!employeeIds?.length) {
       return department;
@@ -72,11 +113,20 @@ export class DepartmentService {
       await this.employeeRepository.save(employee);
     }
 
+    // Department assignment changed: invalidate the department, the employees
+    // list and every affected employee cache entry.
+    await this.cacheInvalidation.onDepartmentChanged(id);
+    await Promise.all(
+      employees.map((employee) =>
+        this.cacheInvalidation.invalidateEmployee(employee.id),
+      ),
+    );
+
     return this.findOne(id);
   }
 
   async remove(id: string) {
-    const department = await this.findOne(id);
+    const department = await this.findOneFresh(id);
 
     if (department.employees?.length) {
       throw new ConflictException(
@@ -85,6 +135,9 @@ export class DepartmentService {
     }
 
     await this.departmentRepository.remove(department);
+
+    await this.cacheInvalidation.onDepartmentChanged(id);
+
     return { message: 'Department deleted' };
   }
 

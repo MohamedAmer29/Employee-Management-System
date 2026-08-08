@@ -95,6 +95,21 @@ export class NotificationsController {
     );
   }
 
+  @Get('unread-count')
+  @ApiOperation({
+    summary: 'Retrieve the unread notification count',
+    description:
+      'Returns the number of unread notifications for the authenticated user. Served from Redis when available and recalculated from PostgreSQL otherwise.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Unread notification count retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getUnreadCount(@CurrentUser('userId') userId: string) {
+    return this.notificationsService.getUnreadCount(userId);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Retrieve a specific notification',

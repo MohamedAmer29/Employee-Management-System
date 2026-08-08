@@ -7,6 +7,7 @@ export const ERROR_MESSAGES = {
   NOT_FOUND: 'Resource not found',
   CONFLICT: 'Resource already exists',
   VALIDATION_FAILED: 'Validation failed',
+  RATE_LIMIT_EXCEEDED: 'Too many requests. Please try again later.',
 
   // Authentication
   INVALID_CREDENTIALS: 'Invalid email or password',
