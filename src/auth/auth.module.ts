@@ -9,7 +9,9 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { SessionService } from './session.service';
 import { LoginProtectionService } from './login-protection.service';
+import { EmailVerificationService } from './email-verification.service';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { OtpModule } from '../otp/otp.module';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { RateLimitGuard } from '../common/guards/rate-limit.guard';
         },
       }),
     }),
+    OtpModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -31,8 +34,9 @@ import { RateLimitGuard } from '../common/guards/rate-limit.guard';
     JwtStrategy,
     SessionService,
     LoginProtectionService,
+    EmailVerificationService,
     RateLimitGuard,
   ],
-  exports: [SessionService],
+  exports: [SessionService, EmailVerificationService],
 })
 export class AuthModule {}

@@ -16,11 +16,16 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
+import { OtpModule } from './otp/otp.module';
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     RedisModule,
+    MailModule,
+    OtpModule,
     AuthModule,
     EventEmitterModule.forRoot(),
     TypeOrmModule.forRootAsync({

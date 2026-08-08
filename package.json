@@ -17,7 +17,14 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migration:run": "node -r dotenv/config -r ts-node/register/transpile-only ./node_modules/typeorm/cli.js -d src/database/data-source.ts migration:run",
+    "migration:revert": "node -r dotenv/config -r ts-node/register/transpile-only ./node_modules/typeorm/cli.js -d src/database/data-source.ts migration:revert",
+    "migration:show": "node -r dotenv/config -r ts-node/register/transpile-only ./node_modules/typeorm/cli.js -d src/database/data-source.ts migration:show",
+    "migration:generate": "node -r dotenv/config -r ts-node/register/transpile-only ./node_modules/typeorm/cli.js -d src/database/data-source.ts migration:generate",
+    "migration:run:prod": "node ./node_modules/typeorm/cli.js -d dist/database/data-source.js migration:run",
+    "migration:revert:prod": "node ./node_modules/typeorm/cli.js -d dist/database/data-source.js migration:revert",
+    "migration:show:prod": "node ./node_modules/typeorm/cli.js -d dist/database/data-source.js migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -34,6 +41,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "ioredis": "^5.11.1",
+    "nodemailer": "^9.0.5",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",
@@ -53,6 +61,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
+    "@types/nodemailer": "^8.0.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "dotenv": "^17.4.2",

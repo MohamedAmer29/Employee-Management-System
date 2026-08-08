@@ -1,0 +1,13 @@
+export const MAIL_TRANSPORTER = Symbol('MAIL_TRANSPORTER');
+
+export const MAIL_SUBJECTS = {
+  EMAIL_VERIFICATION: 'Verify your EMS account',
+} as const;
+
+export const MAIL_DEFAULTS = {
+  CONNECTION_TIMEOUT_MS: 10000,
+  GREETING_TIMEOUT_MS: 10000,
+  SOCKET_TIMEOUT_MS: 20000,
+  POOL_MAX_CONNECTIONS: 5,
+  POOL_MAX_MESSAGES: 100,
+} as const;

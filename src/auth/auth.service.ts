@@ -20,6 +20,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { SessionService } from './session.service';
 import { LoginProtectionService } from './login-protection.service';
+import { EmailVerificationService } from './email-verification.service';
+import { EmailNotVerifiedException } from '../common/exceptions/email-verification.exception';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +32,7 @@ export class AuthService {
     private readonly eventEmitter: EventEmitter2,
     private readonly sessionService: SessionService,
     private readonly loginProtection: LoginProtectionService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async register(
@@ -79,20 +82,12 @@ export class AuthService {
       role,
     });
 
+    // New accounts always start unverified and must complete the OTP flow.
+    newUser.isEmailVerified = false;
+    newUser.emailVerifiedAt = null;
+
     // user.employee.isActive = true;
     await this.userRepository.save(newUser);
-
-    const payload = {
-      sub: newUser.id,
-      role: newUser.role,
-      tokenVersion: newUser.tokenVersion,
-    };
-
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '15m',
-    });
-
-    await this.issueRefreshSession(newUser.id, payload, req, res);
 
     this.eventEmitter.emit('audit.log.created', {
       userId: newUser.id,
@@ -108,9 +103,17 @@ export class AuthService {
       userAgent: req.get('user-agent') ?? undefined,
     });
 
+    // Send the verification code. If SMTP delivery fails the account still
+    // exists and the user can request a new code via /auth/resend-verification-otp,
+    // so the failure is surfaced without rolling back the registration.
+    await this.emailVerificationService.sendOtpForNewUser(newUser);
+
+    // No tokens are issued here - the user is not authenticated until their
+    // email has been verified.
     return {
-      message: 'User registered successfully',
-      accessToken,
+      success: true,
+      message:
+        'Registration successful. Please check your email to verify your account.',
     };
   }
 
@@ -151,7 +154,25 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Credentials were correct, so this is not a brute-force attempt.
     await this.loginProtection.clearFailures(ip, username);
+
+    // Email verification gate. Checked after the password so an attacker
+    // cannot use this endpoint to discover which accounts are unverified.
+    // No token is issued and no session is created when this throws.
+    if (!user.isEmailVerified) {
+      this.eventEmitter.emit('audit.log.created', {
+        userId: user.id,
+        action: AuditAction.LOGIN_FAILED,
+        entity: 'User',
+        entityId: String(user.id),
+        description: 'Login blocked: email not verified',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+
+      throw new EmailNotVerifiedException();
+    }
 
     const payload = {
       sub: user.id,
@@ -176,6 +197,19 @@ export class AuthService {
     });
 
     return { accessToken };
+  }
+
+  /**
+   * Sends (or resends) an email-verification OTP.
+   * Both endpoints share this implementation - the behaviour is identical and
+   * the response never reveals whether the account exists.
+   */
+  sendVerificationOtp(email: string) {
+    return this.emailVerificationService.requestVerificationOtp(email);
+  }
+
+  verifyEmail(email: string, otp: string) {
+    return this.emailVerificationService.verifyEmail(email, otp);
   }
 
   async refreshToken(

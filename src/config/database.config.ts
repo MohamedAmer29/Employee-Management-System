@@ -4,8 +4,7 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
-  const dbType = configService.get<string>('TYPE');
-  console.log(configService);
+  const dbType = configService.get<string>('TYPE') ?? 'postgres';
   const validTypes = ['postgres', 'mysql', 'mariadb', 'sqlite', 'mssql'];
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   if (!validTypes.includes(dbType as any)) {
@@ -14,16 +13,40 @@ export const getDatabaseConfig = (
     );
   }
 
+  const nodeEnv = configService.get<string>('NODE_ENV');
+  const isProduction = nodeEnv === 'production';
+
   return {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     type: dbType as any,
-    host: configService.get<string>('HOSTNAME'),
-    port: Number(configService.get<number>('DATABASE_PORT')),
+    host: resolveDatabaseHost(configService),
+    port: Number(configService.get<string>('DATABASE_PORT') ?? 5432),
     username: configService.get<string>('DATABASE_USERNAME'),
     password: configService.get<string>('PASSWORD'),
     database: configService.get<string>('DATABASE'),
     autoLoadEntities: true,
-    synchronize: true,
-    logging: configService.get<string>('NODE_ENV') === 'development',
+    // Schema is managed by migrations in production. Auto-synchronising a
+    // production database can silently drop columns and lose data.
+    synchronize: !isProduction,
+    migrationsRun: false,
+    logging: nodeEnv === 'development',
   };
 };
+
+/**
+ * Resolves the database host.
+ *
+ * DATABASE_HOST is checked first and is the variable to use in Docker, where
+ * it should be set to the Compose service name (e.g. "postgres").
+ *
+ * HOSTNAME is deliberately NOT used: Docker automatically sets HOSTNAME to the
+ * container's own ID inside every container, which would make the application
+ * try to connect to itself.
+ */
+function resolveDatabaseHost(configService: ConfigService): string {
+  return (
+    configService.get<string>('DATABASE_HOST') ??
+    configService.get<string>('HOST') ??
+    'localhost'
+  );
+}

@@ -16,6 +16,21 @@ export const ERROR_MESSAGES = {
   MISSING_TOKEN: 'Authentication token is required',
   SESSION_EXPIRED: 'Your session has expired. Please login again',
 
+  // Email verification / OTP
+  EMAIL_NOT_VERIFIED: 'Please verify your email before logging in',
+  EMAIL_ALREADY_VERIFIED: 'Email is already verified',
+  INVALID_OTP: 'Invalid verification code',
+  OTP_EXPIRED: 'Verification code has expired',
+  OTP_TOO_MANY_ATTEMPTS:
+    'Too many invalid attempts. Please request a new verification code.',
+  OTP_RATE_LIMIT_EXCEEDED:
+    'Too many verification requests. Please try again later.',
+  EMAIL_SEND_FAILED: 'Unable to send verification email',
+  VERIFICATION_EMAIL_SENT: 'Verification code sent successfully',
+  VERIFICATION_EMAIL_SENT_GENERIC:
+    'If the account exists, a verification email has been sent.',
+  EMAIL_VERIFIED: 'Email verified successfully',
+
   // User
   USER_NOT_FOUND: 'User not found',
   USER_ALREADY_EXISTS: 'User with this username already exists',

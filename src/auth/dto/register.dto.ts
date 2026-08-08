@@ -1,4 +1,5 @@
-import { IsEnum, IsString, IsStrongPassword } from 'class-validator';
+import { IsEmail, IsEnum, IsString, IsStrongPassword } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { Role } from '../interfaces/Role.enum';
 import { ApiProperty } from '@nestjs/swagger';
 export class RegisterDto {
@@ -45,10 +46,14 @@ export class RegisterDto {
   nationalId!: string;
 
   @ApiProperty({
-    description: 'The username of the user',
+    description:
+      'The username of the user. This is also the email address the verification code is sent to.',
     example: 'mohamed@gmail.com',
   })
-  @IsString()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.toLowerCase().trim() : value,
+  )
+  @IsEmail()
   username!: string;
 
   @ApiProperty({

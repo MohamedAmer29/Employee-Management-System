@@ -52,6 +52,9 @@ async function bootstrap() {
   // 3. Setup the Swagger UI route
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  // Bind to 0.0.0.0 so the server is reachable from outside the container.
+  // Binding to localhost would only accept connections from inside the
+  // container itself, making the published port unusable.
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

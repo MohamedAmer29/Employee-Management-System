@@ -1,3 +1,16 @@
+# =============================================================================
+# EMS Backend - production Compose stack
+#
+#   backend (NestJS)  ->  postgres:5432
+#                     ->  redis:6379
+#
+# Only the backend port is published to the host. PostgreSQL and Redis are
+# reachable only from inside the ems-network bridge, via Docker's internal DNS.
+#
+# All credentials come from the host .env file at runtime; nothing is baked
+# into an image.
+# =============================================================================
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,17 +18,25 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${PASSWORD:?PASSWORD is required}
       POSTGRES_DB: ${DATABASE:-EMS}
-    ports:
-      - '${DATABASE_PORT:-5432}:5432'
+    # No `ports:` mapping - the database is not reachable from the host.
+    # To inspect it locally use:
+    #   docker compose exec postgres psql -U postgres -d EMS
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USERNAME:-postgres}']
+      # `pg_isready` alone reports ready during the init phase, so the database
+      # name is included to confirm the target DB actually accepts connections.
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U "${DATABASE_USERNAME:-postgres}" -d "${DATABASE:-EMS}"',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
     networks:
       - ems-network
 
@@ -23,31 +44,102 @@ services:
     image: redis:7-alpine
     container_name: ems-redis
     restart: unless-stopped
+    # Enables AOF persistence, and password auth only when REDIS_PASSWORD is
+    # actually set (an empty --requirepass would break the client handshake).
     command: >
       sh -c '
         if [ -n "$$REDIS_PASSWORD" ]; then
-          redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
         else
-          redis-server --appendonly yes;
+          exec redis-server --appendonly yes;
         fi
       '
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    ports:
-      - '${REDIS_PORT:-6379}:6379'
+    # No `ports:` mapping - Redis is internal only.
     volumes:
-      - redis-data:/data
+      - redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      # REDISCLI_AUTH is read by redis-cli automatically and, unlike -a, keeps
+      # the password out of the process list. It is ignored when empty, so this
+      # works whether or not REDIS_PASSWORD is set.
+      test:
+        [
+          'CMD-SHELL',
+          'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - ems-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ems-backend:latest
+    container_name: ems-backend
+    restart: unless-stopped
+    # Only this port is published to the host.
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # --- PostgreSQL -------------------------------------------------------
+      # "postgres" is the Compose service name, resolved by Docker's internal
+      # DNS. Using localhost here would resolve to the backend container
+      # itself, where nothing is listening on 5432.
+      TYPE: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      PASSWORD: ${PASSWORD:?PASSWORD is required}
+      DATABASE: ${DATABASE:-EMS}
+
+      # --- Redis ------------------------------------------------------------
+      # "redis" is likewise the Compose service name, not localhost.
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_CONNECT_TIMEOUT: ${REDIS_CONNECT_TIMEOUT:-10000}
+
+      # --- JWT --------------------------------------------------------------
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      REFRESH_SECRET: ${REFRESH_SECRET:?REFRESH_SECRET is required}
+      REFRESH_EXPIRES_IN: ${REFRESH_EXPIRES_IN:-7d}
+
+      # --- Mail / OTP -------------------------------------------------------
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:?MAIL_USER is required}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
+      OTP_EXPIRES_IN: ${OTP_EXPIRES_IN:-300}
+      OTP_LENGTH: ${OTP_LENGTH:-6}
+    depends_on:
+      # `service_healthy` waits for the healthchecks above to pass, not merely
+      # for the containers to start. depends_on alone does not guarantee that
+      # PostgreSQL is accepting connections.
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No source bind-mount: the production container runs the compiled dist/
+    # baked into the image.
     networks:
       - ems-network
 
 volumes:
-  postgres-data:
-  redis-data:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
 
 networks:
   ems-network:
