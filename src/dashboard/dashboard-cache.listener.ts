@@ -54,6 +54,16 @@ export class DashboardCacheListener {
     await this.cacheInvalidation.onEmployeeActivity(event.userId);
   }
 
+  /**
+   * Fired when a user account is created, activated, deactivated or deleted.
+   * The admin dashboard now counts users as employees, so any user mutation
+   * must drop the cached admin dashboard.
+   */
+  @OnEvent('user.changed')
+  async handleUserChanged() {
+    await this.cacheInvalidation.invalidateAdminDashboard();
+  }
+
   @OnEvent('notification.created')
   async handleNotificationCreated(payload: { userId: string }) {
     if (!payload?.userId) {

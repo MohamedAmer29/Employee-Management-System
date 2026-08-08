@@ -9,6 +9,7 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   OneToMany,
   OneToOne,
@@ -55,7 +56,10 @@ export class Employee {
   @OneToMany(() => PerformanceReview, (review) => review.employee)
   performanceReviews!: PerformanceReview[];
 
-  @OneToOne(() => User, (user) => user.employee)
+  @OneToOne(() => User, (user) => user.employee, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn()
   user!: User;
 
   @CreateDateColumn()

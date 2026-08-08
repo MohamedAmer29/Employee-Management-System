@@ -276,10 +276,12 @@ export class DashboardService {
   }
 
   private async getEmployeeStats(): Promise<EmployeeStats> {
+    // "Employees" reflects every account in the system (Admin, Manager and
+    // Employee users), matching what the admin sees in the users list.
     const [total, active, inactive] = await Promise.all([
-      this.employeeRepository.count(),
-      this.employeeRepository.count({ where: { isActive: true } }),
-      this.employeeRepository.count({ where: { isActive: false } }),
+      this.userRepository.count(),
+      this.userRepository.count({ where: { isActive: true } }),
+      this.userRepository.count({ where: { isActive: false } }),
     ]);
 
     // For new employees this month, we'll return 0 for now since createdAt might not be available

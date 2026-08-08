@@ -133,7 +133,8 @@ describe('EmployeesService', () => {
       const result = await service.create(dto as any);
 
       expect(employeeRepository.save).toHaveBeenCalled();
-      expect(userRepository.save).toHaveBeenCalled();
+      expect(adminEmployee.user).toBe(adminUser);
+      expect(userRepository.save).not.toHaveBeenCalled();
       expect(result).toBe(adminEmployee);
     });
 
@@ -296,7 +297,6 @@ describe('EmployeesService', () => {
       const adminUser = { ...user, role: Role.admin } as unknown as User;
       employeeRepository.findOne.mockResolvedValue(adminEmployee);
       userRepository.findOne.mockResolvedValue(adminUser);
-      userRepository.save.mockResolvedValue(adminUser);
       employeeRepository.save.mockResolvedValue({
         ...adminEmployee,
         user: adminUser,
@@ -304,7 +304,9 @@ describe('EmployeesService', () => {
 
       const result = await service.assignUser('emp-1', 'user-1');
 
-      expect(userRepository.save).toHaveBeenCalledWith(adminUser);
+      expect(employeeRepository.save).toHaveBeenCalled();
+      expect(adminEmployee.user).toBe(adminUser);
+      expect(userRepository.save).not.toHaveBeenCalled();
       expect(result).toMatchObject({ user: adminUser });
     });
   });

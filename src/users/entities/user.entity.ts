@@ -5,7 +5,6 @@ import { Notification } from '@/notifications/notification.entity';
 import {
   Column,
   Entity,
-  JoinColumn,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -56,7 +55,6 @@ export class User {
   emailVerifiedAt!: Date | null;
 
   @OneToOne(() => Employee, (employee) => employee.user)
-  @JoinColumn()
   employee!: Employee;
 
   @OneToMany(() => AuditLog, (auditLog) => auditLog.user)

@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -17,6 +18,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 export class UsersService {
   constructor(
     @InjectRepository(User) private userRepository: Repository<User>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(dto: RegisterDto) {
@@ -33,7 +35,9 @@ export class UsersService {
       role: dto.role,
     });
 
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    this.eventEmitter.emit('user.changed');
+    return saved;
   }
 
   findAll() {
@@ -96,19 +100,24 @@ export class UsersService {
     const user = await this.findOne(id);
 
     user.isActive = false;
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    this.eventEmitter.emit('user.changed');
+    return saved;
   }
 
   async activate(id: string) {
     const user = await this.findOne(id);
 
     user.isActive = true;
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    this.eventEmitter.emit('user.changed');
+    return saved;
   }
 
   async remove(id: string) {
     const user = await this.findOne(id);
     await this.userRepository.remove(user);
+    this.eventEmitter.emit('user.changed');
     return { message: 'User deleted' };
   }
 }

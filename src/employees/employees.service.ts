@@ -273,8 +273,6 @@ export class EmployeesService {
     }
 
     employee.user = user;
-    user.employee = employee;
-    await this.userRepository.save(user);
     const saved = await this.employeeRepository.save(employee);
 
     await this.cacheInvalidation.onEmployeeChanged(id, userId);

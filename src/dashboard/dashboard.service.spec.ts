@@ -67,6 +67,7 @@ describe('DashboardService', () => {
         count: jest.fn(),
       },
       User: {
+        count: jest.fn(),
         findOne: jest.fn(),
       },
     };
@@ -127,6 +128,7 @@ describe('DashboardService', () => {
   describe('getAdminDashboard', () => {
     it('should return aggregated admin statistics', async () => {
       repositories.Employee.count.mockResolvedValue(10);
+      repositories.User.count.mockResolvedValue(10);
       repositories.Attendance.count.mockResolvedValue(5);
       repositories.LeaveRequest.count.mockResolvedValue(3);
       repositories.PerformanceReview.count.mockResolvedValue(2);

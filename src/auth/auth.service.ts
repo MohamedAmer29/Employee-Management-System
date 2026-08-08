@@ -89,6 +89,8 @@ export class AuthService {
     // user.employee.isActive = true;
     await this.userRepository.save(newUser);
 
+    this.eventEmitter.emit('user.changed');
+
     this.eventEmitter.emit('audit.log.created', {
       userId: newUser.id,
       action: AuditAction.CREATE,
