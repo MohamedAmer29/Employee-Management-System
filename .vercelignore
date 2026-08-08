@@ -1,9 +1,10 @@
 # Keep the deployment to the compiled output only.
 #
-# Uploading src/ is what caused Vercel to transpile TypeScript per-file and
-# emit unresolved "@/..." requires at runtime. The build runs from a clean
-# checkout, so src/ is still present during `npm run build` - this only
-# controls what ships in the final function bundle.
+# src/ MUST stay in the upload - `npm run build` (Vercel buildCommand) needs
+# it. The per-file transpile that caused the unresolved "@/..." runtime errors
+# was Vercel's NestJS framework auto-detection. It is disabled via
+# "framework": null in vercel.json, so Vercel runs our buildCommand and bundles
+# only the api/index.js entrypoint + dist/** (see vercel.json includeFiles).
 
 node_modules
 coverage
