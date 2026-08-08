@@ -1,11 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
-  "outputDirectory": "dist",
   "functions": {
-    "dist/serverless.js": {
+    "api/index.js": {
       "includeFiles": "dist/**",
       "maxDuration": 30,
       "memory": 1024
@@ -14,7 +12,7 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/dist/serverless.js"
+      "destination": "/api/index"
     }
   ]
 }
