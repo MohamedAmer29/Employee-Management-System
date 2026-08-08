@@ -3,6 +3,7 @@
   "framework": null,
   "buildCommand": "npm run build",
   "installCommand": "npm ci --include=dev",
+  "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
       "includeFiles": "dist/**",
