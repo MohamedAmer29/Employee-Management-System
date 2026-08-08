@@ -1,0 +1,36 @@
+# Keep the deployment to the compiled output only.
+#
+# Uploading src/ is what caused Vercel to transpile TypeScript per-file and
+# emit unresolved "@/..." requires at runtime. The build runs from a clean
+# checkout, so src/ is still present during `npm run build` - this only
+# controls what ships in the final function bundle.
+
+node_modules
+coverage
+.nyc_output
+
+.git
+.github
+
+.env
+.env.*
+!.env.example
+
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+test
+tests
+**/*.spec.ts
+**/*.test.ts
+**/*.e2e-spec.ts
+
+.vscode
+.idea
+*.log
+image
+uploads
+README.md
