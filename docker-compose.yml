@@ -82,6 +82,11 @@ services:
     image: ems-backend:latest
     container_name: ems-backend
     restart: unless-stopped
+    # Load the full .env into the container. The explicit `environment:` values
+    # below take precedence over these, so container hostnames (postgres/redis)
+    # and NODE_ENV=production are never shadowed by the host .env.
+    env_file:
+      - .env
     # Only this port is published to the host.
     ports:
       - '${PORT:-3000}:3000'

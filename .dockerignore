@@ -20,10 +20,14 @@ build
 coverage
 .nyc_output
 
-# Secrets - must never be baked into an image layer.
+# Secrets. NOTE: .env is deliberately re-included (!.env) so the production
+# stage can COPY it into the image (/app/.env). This bakes credentials into
+# every image layer - only do this for private/trusted registries, never for a
+# public Docker Hub repo.
 .env
 .env.*
 !.env.example
+!.env
 
 # Version control
 .git

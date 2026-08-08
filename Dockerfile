@@ -77,6 +77,7 @@ RUN chown -R node:node /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node .env /app/.env
 
 # Drop root before running the application.
 USER node
