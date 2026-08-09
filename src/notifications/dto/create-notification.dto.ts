@@ -1,14 +1,17 @@
 import {
   IsEnum,
   IsNotEmpty,
+  IsNumberString,
   IsOptional,
   IsString,
-  IsUUID,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { NotificationType } from '../enums/notification-type.enum';
+import { toIdString } from '../../common/transforms/id-string.transform';
 
 export class CreateNotificationDto {
-  @IsUUID()
+  @Transform(toIdString)
+  @IsNumberString()
   @IsNotEmpty()
   userId!: string;
 

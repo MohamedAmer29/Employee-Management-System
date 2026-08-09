@@ -11,6 +11,8 @@ import { Employee } from './entities/employee.entity';
 import { Department } from '../department/entities/department.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../auth/interfaces/Role.enum';
+import { RedisService } from '../redis/redis.service';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 
 jest.mock('fs', () => ({
   ...jest.requireActual<typeof import('fs')>('fs'),
@@ -26,12 +28,25 @@ describe('EmployeesService', () => {
     create: jest.Mock;
     findOne: jest.Mock;
     find: jest.Mock;
+    createQueryBuilder: jest.Mock;
     save: jest.Mock;
     remove: jest.Mock;
   };
   let departmentRepository: { findOne: jest.Mock };
   let userRepository: { findOne: jest.Mock; save: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  let redisService: {
+    remember: jest.Mock;
+    rememberWithLock: jest.Mock;
+    getJson: jest.Mock;
+    setJson: jest.Mock;
+  };
+  let cacheInvalidation: {
+    onEmployeeChanged: jest.Mock;
+    onDepartmentChanged: jest.Mock;
+    invalidateDepartment: jest.Mock;
+    invalidateEmployee: jest.Mock;
+  };
 
   const department = { id: 'dept-1', name: 'Engineering' } as Department;
   const user = { id: 'user-1', role: Role.employee } as unknown as User;
@@ -52,12 +67,38 @@ describe('EmployeesService', () => {
       create: jest.fn(),
       findOne: jest.fn(),
       find: jest.fn(),
+      createQueryBuilder: jest.fn(),
       save: jest.fn(),
       remove: jest.fn(),
     };
     departmentRepository = { findOne: jest.fn() };
     userRepository = { findOne: jest.fn(), save: jest.fn() };
     eventEmitter = { emit: jest.fn() };
+    redisService = {
+      remember: jest
+        .fn()
+        .mockImplementation(
+          <T>(_key: string, _ttl: number, loader: () => Promise<T>) => loader(),
+        ),
+      rememberWithLock: jest
+        .fn()
+        .mockImplementation(
+          <T>(
+            _key: string,
+            _lockKey: string,
+            _ttl: number,
+            loader: () => Promise<T>,
+          ) => loader(),
+        ),
+      getJson: jest.fn(),
+      setJson: jest.fn(),
+    };
+    cacheInvalidation = {
+      onEmployeeChanged: jest.fn(),
+      onDepartmentChanged: jest.fn(),
+      invalidateDepartment: jest.fn(),
+      invalidateEmployee: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -69,6 +110,8 @@ describe('EmployeesService', () => {
         },
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: RedisService, useValue: redisService },
+        { provide: CacheInvalidationService, useValue: cacheInvalidation },
       ],
     }).compile();
 
@@ -94,10 +137,15 @@ describe('EmployeesService', () => {
       employeeRepository.create.mockReturnValue(employee);
       departmentRepository.findOne.mockResolvedValue(department);
       employeeRepository.save.mockResolvedValue(employee);
-      employeeRepository.findOne.mockResolvedValue(employee);
+      employeeRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(employee);
 
       const result = await service.create(dto as any);
 
+      expect(employeeRepository.findOne).toHaveBeenCalledWith({
+        where: { email: 'jane@example.com' },
+      });
       expect(departmentRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'dept-1' },
       });
@@ -106,7 +154,7 @@ describe('EmployeesService', () => {
         where: { id: 'emp-1' },
         relations: ['department', 'user'],
       });
-      expect(result).toBe(employee);
+      expect(result).toMatchObject(employee);
     });
 
     it('should create an admin employee and assign the user account', async () => {
@@ -114,7 +162,11 @@ describe('EmployeesService', () => {
         ...employee,
         role: Role.admin,
       } as unknown as Employee;
-      const adminUser = { ...user, role: Role.admin } as unknown as User;
+      const adminUser = {
+        ...user,
+        role: Role.admin,
+        username: 'jane@example.com',
+      } as unknown as User;
       const dto = {
         fullName: 'Jane Doe',
         email: 'jane@example.com',
@@ -126,16 +178,44 @@ describe('EmployeesService', () => {
 
       employeeRepository.create.mockReturnValue(adminEmployee);
       employeeRepository.save.mockResolvedValue(adminEmployee);
-      employeeRepository.findOne.mockResolvedValue(adminEmployee);
+      employeeRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(adminEmployee);
       userRepository.findOne.mockResolvedValue(adminUser);
-      userRepository.save.mockResolvedValue(adminUser);
 
       const result = await service.create(dto as any);
 
+      expect(userRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        relations: ['employee'],
+      });
+      expect(employeeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ user: adminUser }),
+      );
       expect(employeeRepository.save).toHaveBeenCalled();
-      expect(adminEmployee.user).toBe(adminUser);
       expect(userRepository.save).not.toHaveBeenCalled();
-      expect(result).toBe(adminEmployee);
+      expect(result).toMatchObject({ id: 'emp-1' });
+    });
+
+    it('should throw ConflictException when the user already has an employee', async () => {
+      const dto = {
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '5551234567',
+        position: 'Developer',
+        role: Role.admin,
+        userId: 'user-1',
+      };
+
+      userRepository.findOne.mockResolvedValue({
+        ...user,
+        role: Role.admin,
+        employee: employee,
+      });
+
+      await expect(service.create(dto as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should throw NotFoundException when department does not exist', async () => {
@@ -149,23 +229,100 @@ describe('EmployeesService', () => {
       };
 
       employeeRepository.create.mockReturnValue({ ...employee });
+      employeeRepository.findOne.mockResolvedValueOnce(null);
       departmentRepository.findOne.mockResolvedValue(null);
 
       await expect(service.create(dto as any)).rejects.toThrow(
         NotFoundException,
       );
     });
+
+    it('should throw ConflictException when email already exists', async () => {
+      const dto = {
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '5551234567',
+        position: 'Developer',
+        role: Role.employee,
+      };
+
+      employeeRepository.findOne.mockResolvedValue(employee);
+
+      await expect(service.create(dto as any)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw ConflictException when employee email does not match the user account email', async () => {
+      const dto = {
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '5551234567',
+        position: 'Developer',
+        role: Role.admin,
+        userId: 'user-1',
+      };
+
+      userRepository.findOne.mockResolvedValue({
+        ...user,
+        role: Role.admin,
+        username: 'other@example.com',
+      });
+      employeeRepository.findOne.mockResolvedValueOnce(null);
+
+      await expect(service.create(dto as any)).rejects.toThrow(
+        ConflictException,
+      );
+    });
   });
 
   describe('findAll / findOne', () => {
     it('should return all employees with relations', async () => {
-      employeeRepository.find.mockResolvedValue([employee]);
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([employee]),
+      };
+
+      employeeRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       const result = await service.findAll();
 
-      expect(employeeRepository.find).toHaveBeenCalledWith({
-        relations: ['department', 'user'],
-      });
+      expect(redisService.rememberWithLock).toHaveBeenCalledWith(
+        'employees:list',
+        'employees:list:lock',
+        expect.any(Number),
+        expect.any(Function),
+        expect.any(Number),
+      );
+      expect(employeeRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'employee',
+      );
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'employee.department',
+        'department',
+      );
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'employee.user',
+        'user',
+      );
+      expect(mockQueryBuilder.select).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'employee.fullName',
+          'department.id',
+          'user.username',
+        ]),
+      );
+      expect(mockQueryBuilder.select).toHaveBeenCalledWith(
+        expect.not.arrayContaining(['user.password']),
+      );
+      expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'employee.createdAt',
+        'DESC',
+      );
       expect(result).toEqual([employee]);
     });
 
@@ -174,7 +331,8 @@ describe('EmployeesService', () => {
 
       const result = await service.findOne('emp-1');
 
-      expect(result).toBe(employee);
+      expect(result).toMatchObject(employee);
+      expect(result.user).not.toHaveProperty('password');
     });
 
     it('should throw NotFoundException when employee not found', async () => {

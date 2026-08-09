@@ -1,15 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsNumberString,
   IsOptional,
   IsPhoneNumber,
   IsString,
-  IsUUID,
   MinLength,
 } from 'class-validator';
 import { Role } from '../../auth/interfaces/Role.enum';
+import { toIdString } from '../../common/transforms/id-string.transform';
 
 export class CreateEmployeeDto {
   @ApiProperty({ description: 'Employee full name' })
@@ -36,12 +38,14 @@ export class CreateEmployeeDto {
 
   @ApiProperty({ required: false, description: 'Department id to assign' })
   @IsOptional()
-  @IsUUID()
+  @Transform(toIdString)
+  @IsNumberString()
   departmentId?: string;
 
   @ApiProperty({ required: false, description: 'User account id to assign' })
   @IsOptional()
-  @IsUUID()
+  @Transform(toIdString)
+  @IsNumberString()
   userId?: string;
 
   @ApiProperty({

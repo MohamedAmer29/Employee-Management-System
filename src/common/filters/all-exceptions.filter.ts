@@ -108,13 +108,29 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private formatValidationErrors(
-    errors: NestValidationError[],
+    errors: Array<NestValidationError | string>,
   ): ValidationError[] {
     const formattedErrors: ValidationError[] = [];
 
     for (const error of errors) {
+      // Defensive: a BadRequestException can carry flattened string messages
+      // instead of ValidationError objects.
+      if (typeof error === 'string') {
+        formattedErrors.push({ field: 'unknown', messages: [error] });
+        continue;
+      }
+
       const constraints = error.constraints;
-      const messages = constraints ? Object.values(constraints) : [];
+      let messages = constraints ? Object.values(constraints) : [];
+
+      // Whitelist rejections (forbidNonWhitelisted) carry no constraints and
+      // no children - surface the offending property instead of an empty list.
+      if (
+        messages.length === 0 &&
+        (!error.children || error.children.length === 0)
+      ) {
+        messages = [`${error.property} is not allowed`];
+      }
 
       formattedErrors.push({
         field: error.property,

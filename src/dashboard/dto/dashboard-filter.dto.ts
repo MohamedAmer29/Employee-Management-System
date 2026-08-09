@@ -1,6 +1,12 @@
-import { Type } from 'class-transformer';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+import {
+  IsEnum,
+  IsNumberString,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { DashboardPeriod } from '../enums/dashboard-period.enum';
+import { toIdString } from '../../common/transforms/id-string.transform';
 
 export class DashboardFilterDto {
   @IsOptional()
@@ -16,6 +22,7 @@ export class DashboardFilterDto {
   dateTo?: string;
 
   @IsOptional()
-  @IsUUID()
+  @Transform(toIdString)
+  @IsNumberString()
   departmentId?: string;
 }

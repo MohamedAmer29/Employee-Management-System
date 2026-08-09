@@ -4,6 +4,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DepartmentService } from './department.service';
 import { Department } from './entities/department.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { RedisService } from '../redis/redis.service';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 
 describe('DepartmentService', () => {
   let service: DepartmentService;
@@ -47,6 +49,24 @@ describe('DepartmentService', () => {
           useValue: departmentRepository,
         },
         { provide: getRepositoryToken(Employee), useValue: employeeRepository },
+        {
+          provide: RedisService,
+          useValue: {
+            remember: jest.fn(
+              <T>(_key: string, _ttl: number, loader: () => Promise<T>) =>
+                loader(),
+            ),
+            getJson: jest.fn().mockResolvedValue(null),
+            setJson: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: CacheInvalidationService,
+          useValue: {
+            onDepartmentChanged: jest.fn().mockResolvedValue(undefined),
+            invalidateEmployee: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 

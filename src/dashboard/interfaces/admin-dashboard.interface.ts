@@ -76,6 +76,7 @@ export interface RecentActivity {
 export interface AdminDashboardData {
   employees: EmployeeStats;
   departments: DepartmentStats;
+  employeesPerDepartment: DepartmentEmployeeCount[];
   attendance: AttendanceStats;
   leave: LeaveStats;
   performance: PerformanceStats;

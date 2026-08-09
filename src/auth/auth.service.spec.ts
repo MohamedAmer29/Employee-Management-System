@@ -10,7 +10,12 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { User } from '../users/entities/user.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { Role } from './interfaces/Role.enum';
+import { SessionService } from './session.service';
+import { LoginProtectionService } from './login-protection.service';
+import { EmailVerificationService } from './email-verification.service';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -29,10 +34,32 @@ describe('AuthService', () => {
     findOne: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+    manager: any;
   };
   let jwtService: { sign: jest.Mock; verify: jest.Mock };
   let configService: { get: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  let mockSessionService: {
+    generateSessionId: jest.Mock;
+    createSession: jest.Mock;
+    validateSession: jest.Mock;
+    revokeSession: jest.Mock;
+    revokeAllSessions: jest.Mock;
+    listSessions: jest.Mock;
+  };
+  let mockLoginProtection: {
+    assertNotLocked: jest.Mock;
+    registerFailure: jest.Mock;
+    clearFailures: jest.Mock;
+  };
+  let mockEmailVerification: {
+    sendOtpForNewUser: jest.Mock;
+    requestVerificationOtp: jest.Mock;
+    verifyEmail: jest.Mock;
+  };
+  let mockCacheInvalidation: {
+    onEmployeeChanged: jest.Mock;
+  };
 
   const user = {
     id: 'user-1',
@@ -43,6 +70,7 @@ describe('AuthService', () => {
     role: Role.employee,
     tokenVersion: 0,
     isActive: true,
+    isEmailVerified: true,
   } as unknown as User;
 
   const res = {
@@ -63,18 +91,52 @@ describe('AuthService', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
+      manager: {
+        transaction: jest.fn(async (cb: any) =>
+          cb({
+            create: (_entity: any, data: any) => data,
+            save: (_entity: any, data: any) => data,
+          }),
+        ),
+      },
     };
     jwtService = { sign: jest.fn(), verify: jest.fn() };
     configService = { get: jest.fn() };
     eventEmitter = { emit: jest.fn() };
+    mockSessionService = {
+      generateSessionId: jest.fn(() => 'session-1'),
+      createSession: jest.fn().mockResolvedValue('session-1'),
+      validateSession: jest.fn().mockResolvedValue(true),
+      revokeSession: jest.fn().mockResolvedValue(undefined),
+      revokeAllSessions: jest.fn().mockResolvedValue(0),
+      listSessions: jest.fn().mockResolvedValue([]),
+    };
+    mockLoginProtection = {
+      assertNotLocked: jest.fn().mockResolvedValue(undefined),
+      registerFailure: jest.fn().mockResolvedValue(undefined),
+      clearFailures: jest.fn().mockResolvedValue(undefined),
+    };
+    mockEmailVerification = {
+      sendOtpForNewUser: jest.fn().mockResolvedValue(undefined),
+      requestVerificationOtp: jest.fn().mockResolvedValue({}),
+      verifyEmail: jest.fn().mockResolvedValue({}),
+    };
+    mockCacheInvalidation = {
+      onEmployeeChanged: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: getRepositoryToken(Employee), useValue: {} },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: SessionService, useValue: mockSessionService },
+        { provide: LoginProtectionService, useValue: mockLoginProtection },
+        { provide: EmailVerificationService, useValue: mockEmailVerification },
+        { provide: CacheInvalidationService, useValue: mockCacheInvalidation },
       ],
     }).compile();
 
@@ -99,47 +161,41 @@ describe('AuthService', () => {
       role: Role.employee,
     };
 
-    it('should register a new user and return an access token', async () => {
+    it('should register a new user and return a verification message', async () => {
       userRepository.findOneBy.mockResolvedValue(null);
       mockBcryptHash.mockResolvedValue('hashed-password');
-      userRepository.create.mockReturnValue(user);
-      userRepository.save.mockResolvedValue(user);
-      jwtService.sign.mockReturnValue('access-token');
 
-      const result = await service.register(dto, req, res as any);
+      const result = await service.register(dto, req);
 
       expect(userRepository.findOneBy).toHaveBeenCalledWith({
         username: 'janedoe',
       });
-      expect(userRepository.save).toHaveBeenCalled();
-      expect(jwtService.sign).toHaveBeenCalled();
-      expect(res.cookie).toHaveBeenCalledWith(
-        'refresh_token',
-        expect.any(String),
-        expect.any(Object),
-      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith('user.changed');
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'audit.log.created',
         expect.objectContaining({ entity: 'User' }),
       );
+      expect(mockCacheInvalidation.onEmployeeChanged).toHaveBeenCalled();
+      expect(mockEmailVerification.sendOtpForNewUser).toHaveBeenCalled();
       expect(result).toEqual({
-        message: 'User registered successfully',
-        accessToken: 'access-token',
+        success: true,
+        message:
+          'Registration successful. Please check your email to verify your account.',
       });
     });
 
     it('should throw BadRequestException when credentials are missing', async () => {
       const incomplete = { ...dto, username: '' } as any;
 
-      await expect(
-        service.register(incomplete, req, res as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.register(incomplete, req)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw ConflictException when username already exists', async () => {
       userRepository.findOneBy.mockResolvedValue(user);
 
-      await expect(service.register(dto, req, res as any)).rejects.toThrow(
+      await expect(service.register(dto, req)).rejects.toThrow(
         ConflictException,
       );
     });
@@ -150,9 +206,9 @@ describe('AuthService', () => {
         cookies: { refresh_token: 'some-token' },
       };
 
-      await expect(
-        service.register(dto, authedReq, res as any),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.register(dto, authedReq)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -173,11 +229,14 @@ describe('AuthService', () => {
         where: { username: 'janedoe' },
         relations: ['employee'],
       });
+      expect(mockLoginProtection.assertNotLocked).toHaveBeenCalled();
+      expect(mockLoginProtection.clearFailures).toHaveBeenCalled();
       expect(res.cookie).toHaveBeenCalledWith(
         'refresh_token',
         expect.any(String),
         expect.any(Object),
       );
+      expect(mockSessionService.createSession).toHaveBeenCalled();
       expect(eventEmitter.emit).toHaveBeenCalled();
       expect(result).toEqual({ accessToken: 'access-token' });
     });
@@ -359,8 +418,8 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('should clear the refresh cookie and return a message', () => {
-      const result = service.logout(res as any, req);
+    it('should clear the refresh cookie and return a message', async () => {
+      const result = await service.logout(res as any, req);
 
       expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
       expect(eventEmitter.emit).toHaveBeenCalledWith(

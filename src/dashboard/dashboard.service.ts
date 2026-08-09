@@ -103,6 +103,7 @@ export class DashboardService {
     return {
       employees: employeeStats,
       departments: departmentStats,
+      employeesPerDepartment: departmentStats.employeesPerDepartment,
       attendance: attendanceStats,
       leave: leaveStats,
       performance: performanceStats,
@@ -276,16 +277,20 @@ export class DashboardService {
   }
 
   private async getEmployeeStats(): Promise<EmployeeStats> {
-    // "Employees" reflects every account in the system (Admin, Manager and
-    // Employee users), matching what the admin sees in the users list.
-    const [total, active, inactive] = await Promise.all([
-      this.userRepository.count(),
-      this.userRepository.count({ where: { isActive: true } }),
-      this.userRepository.count({ where: { isActive: false } }),
-    ]);
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // For new employees this month, we'll return 0 for now since createdAt might not be available
-    const newThisMonth = 0;
+    const [total, active, inactive, newThisMonth] = await Promise.all([
+      this.employeeRepository.count(),
+      this.employeeRepository.count({ where: { isActive: true } }),
+      this.employeeRepository.count({ where: { isActive: false } }),
+      this.employeeRepository
+        .createQueryBuilder('employee')
+        .where('employee.createdAt >= :date', {
+          date: firstDayOfMonth.toISOString(),
+        })
+        .getCount(),
+    ]);
 
     return {
       total,
@@ -302,13 +307,13 @@ export class DashboardService {
       .createQueryBuilder('employee')
       .leftJoin('employee.department', 'department')
       .select([
-        'department.id as departmentId',
-        'department.name as departmentName',
-        'COUNT(employee.id) as employeeCount',
+        'department.id AS "departmentId"',
+        'department.name AS "departmentName"',
+        'COUNT(employee.id) AS "employeeCount"',
       ])
       .where('department.id IS NOT NULL')
       .groupBy('department.id, department.name')
-      .orderBy('employeeCount', 'DESC')
+      .orderBy('"employeeCount"', 'DESC')
       .getRawMany();
 
     return {

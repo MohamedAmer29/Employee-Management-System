@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsArray, IsNumberString } from 'class-validator';
+import { toIdStringArray } from '../../common/transforms/id-string.transform';
 
 export class AssignEmployeesDto {
   @ApiProperty({
@@ -7,6 +9,7 @@ export class AssignEmployeesDto {
     type: [String],
   })
   @IsArray()
-  @IsUUID('4', { each: true })
+  @Transform(toIdStringArray)
+  @IsNumberString({}, { each: true })
   employeeIds!: string[];
 }

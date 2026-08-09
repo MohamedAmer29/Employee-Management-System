@@ -4,6 +4,7 @@
 
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { Repository } from 'typeorm';
 import {
   BadRequestException,
@@ -22,17 +23,21 @@ import { SessionService } from './session.service';
 import { LoginProtectionService } from './login-protection.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailNotVerifiedException } from '../common/exceptions/email-verification.exception';
+import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User) private userRepository: Repository<User>,
+    @InjectRepository(Employee)
+    private readonly employeeRepository: Repository<Employee>,
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
     private readonly sessionService: SessionService,
     private readonly loginProtection: LoginProtectionService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly cacheInvalidation: CacheInvalidationService,
   ) {}
 
   async register(
@@ -48,7 +53,6 @@ export class AuthService {
       nationalId,
     }: RegisterDto,
     req: Request,
-    res: Response,
   ) {
     this.ensureNoActiveSession(req);
     if (
@@ -70,45 +74,67 @@ export class AuthService {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = this.userRepository.create({
-      firstName,
-      lastName,
-      country,
-      city,
-      phoneNumber,
-      nationalId,
-      username,
-      password: hashedPassword,
-      role,
-    });
+    // User and Employee are created together in one transaction so a failure
+    // while saving either one rolls the whole registration back. The owning
+    // side of the 1:1 relation lives on Employee (employees.userId -> users.id),
+    // so the saved user is assigned through employee.user.
+    const { savedUser, savedEmployee } =
+      await this.userRepository.manager.transaction(async (manager) => {
+        const user = manager.create(User, {
+          firstName,
+          lastName,
+          country,
+          city,
+          phoneNumber,
+          nationalId,
+          username,
+          password: hashedPassword,
+          role,
+          // New accounts always start unverified and must complete the OTP flow.
+          isEmailVerified: false,
+          emailVerifiedAt: null,
+        });
+        const savedUser = await manager.save(User, user);
 
-    // New accounts always start unverified and must complete the OTP flow.
-    newUser.isEmailVerified = false;
-    newUser.emailVerifiedAt = null;
+        const employee = manager.create(Employee, {
+          fullName: `${firstName} ${lastName}`,
+          email: username,
+          phone: phoneNumber,
+          position: role,
+          role,
+          isActive: true,
+          user: savedUser,
+        });
+        const savedEmployee = await manager.save(Employee, employee);
 
-    // user.employee.isActive = true;
-    await this.userRepository.save(newUser);
+        return { savedUser, savedEmployee };
+      });
 
     this.eventEmitter.emit('user.changed');
 
     this.eventEmitter.emit('audit.log.created', {
-      userId: newUser.id,
+      userId: savedUser.id,
       action: AuditAction.CREATE,
       entity: 'User',
-      entityId: String(newUser.id),
+      entityId: String(savedUser.id),
       description: 'User registered an account',
       newValues: {
-        username: newUser.username,
-        role: newUser.role,
+        username: savedUser.username,
+        role: savedUser.role,
       },
       ipAddress: req.ip,
       userAgent: req.get('user-agent') ?? undefined,
     });
 
+    await this.cacheInvalidation.onEmployeeChanged(
+      savedEmployee.id,
+      savedUser.id,
+    );
+
     // Send the verification code. If SMTP delivery fails the account still
     // exists and the user can request a new code via /auth/resend-verification-otp,
     // so the failure is surfaced without rolling back the registration.
-    await this.emailVerificationService.sendOtpForNewUser(newUser);
+    await this.emailVerificationService.sendOtpForNewUser(savedUser);
 
     // No tokens are issued here - the user is not authenticated until their
     // email has been verified.

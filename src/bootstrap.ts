@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -20,6 +20,10 @@ export function configureApp(app: INestApplication): void {
       transformOptions: {
         enableImplicitConversion: true,
       },
+      // Nest 11 flattens validation errors to plain strings by default,
+      // which loses the offending field. Pass the raw ValidationError[]
+      // through instead so AllExceptionsFilter can report field + messages.
+      exceptionFactory: (errors) => new BadRequestException(errors),
     }),
   );
 

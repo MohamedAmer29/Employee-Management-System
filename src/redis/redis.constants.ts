@@ -26,6 +26,7 @@ export const RATE_LIMIT_DEFAULTS = {
 export const RedisKeys = {
   employee: (id: string): string => `employee:${id}`,
   employeesList: (): string => 'employees:list',
+  employeesListLock: (): string => 'employees:list:lock',
   employeePattern: (): string => 'employee:*',
 
   department: (id: string): string => `department:${id}`,

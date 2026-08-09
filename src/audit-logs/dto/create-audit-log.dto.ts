@@ -1,15 +1,18 @@
 import {
   IsEnum,
   IsNotEmpty,
+  IsNumberString,
   IsOptional,
   IsString,
-  IsUUID,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { AuditAction } from '../enums/audit-action.enum';
+import { toIdString } from '../../common/transforms/id-string.transform';
 
 export class CreateAuditLogDto {
   @IsOptional()
-  @IsUUID()
+  @Transform(toIdString)
+  @IsNumberString()
   userId?: string;
 
   @IsEnum(AuditAction)

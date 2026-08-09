@@ -45,13 +45,67 @@ export class EmployeesService {
   ) {}
 
   async create(dto: CreateEmployeeDto) {
+    let user: User | undefined;
+
+    // An email can only belong to one employee. Registration links
+    // employee.email to the user's login email, so a duplicate here signals a
+    // data-integrity problem that would otherwise surface as a confusing
+    // database error.
+    console.log(dto);
+
+    const employeeWithEmail = await this.employeeRepository.findOne({
+      where: { email: dto.email },
+    });
+    if (employeeWithEmail) {
+      throw new ConflictException('An employee with this email already exists');
+    }
+
+    // Resolve the linked user account before the employee row exists, so an
+    // invalid userId never leaves an orphaned employee behind.
+    if (dto.userId) {
+      const foundUser = await this.userRepository.findOne({
+        where: { id: dto.userId },
+        relations: ['employee'],
+      });
+
+      if (!foundUser) {
+        throw new NotFoundException('User account not found');
+      }
+
+      if (foundUser.employee) {
+        throw new ConflictException('User already has an employee profile.');
+      }
+
+      // if (dto.role !== Role.admin && dto.role !== Role.manager) {
+      //   throw new BadRequestException(
+      //     `Only Admin and Manager employees can be assigned a user account (received role: "${dto.role}")`,
+      //   );
+      // }
+
+      if (foundUser.role !== dto.role) {
+        throw new ConflictException('User role must match the employee role');
+      }
+
+      // The employee's contact email must match the linked account's login
+      // email, keeping the employee profile consistent with the credentials
+      // the account uses to sign in.
+      if (foundUser.username !== dto.email) {
+        throw new ConflictException(
+          'Employee email must match the user account email',
+        );
+      }
+
+      user = foundUser;
+    }
+
     const employee = this.employeeRepository.create({
       fullName: dto.fullName,
       email: dto.email,
       phone: dto.phone,
       position: dto.position,
       isActive: dto.isActive ?? true,
-      role: dto.role,
+      role: dto.role ?? 'Employee',
+      user,
     });
 
     if (dto.departmentId) {
@@ -66,10 +120,6 @@ export class EmployeesService {
 
     const savedEmployee = await this.employeeRepository.save(employee);
 
-    if (dto.userId) {
-      await this.assignUser(savedEmployee.id, dto.userId);
-    }
-
     await this.cacheInvalidation.onEmployeeChanged(
       savedEmployee.id,
       dto.userId,
@@ -78,14 +128,44 @@ export class EmployeesService {
     return this.findOne(savedEmployee.id);
   }
 
+  /**
+   * Admin list of all employees. Runs behind a Redis lock so a cache expiry
+   * never causes a stampede of concurrent PostgreSQL scans, and explicitly
+   * selects only the columns the admin list needs - sensitive user data such
+   * as the password hash, nationalId or tokenVersion is never loaded or
+   * cached. Rows are returned in a deterministic order.
+   */
   findAll(): Promise<Employee[]> {
-    return this.redisService.remember(
+    return this.redisService.rememberWithLock(
       RedisKeys.employeesList(),
+      RedisKeys.employeesListLock(),
       CACHE_TTL.EMPLOYEES_LIST,
       () =>
-        this.employeeRepository.find({
-          relations: ['department', 'user'],
-        }),
+        this.employeeRepository
+          .createQueryBuilder('employee')
+          .leftJoinAndSelect('employee.department', 'department')
+          .leftJoinAndSelect('employee.user', 'user')
+          .select([
+            'employee.id',
+            'employee.isActive',
+            'employee.fullName',
+            'employee.email',
+            'employee.phone',
+            'employee.position',
+            'employee.role',
+            'employee.profilePicture',
+            'employee.createdAt',
+            'department.id',
+            'department.name',
+            'user.id',
+            'user.firstName',
+            'user.lastName',
+            'user.username',
+            'user.role',
+          ])
+          .orderBy('employee.createdAt', 'DESC')
+          .getMany(),
+      CACHE_TTL.LOCK,
     );
   }
 
@@ -118,7 +198,7 @@ export class EmployeesService {
       CACHE_TTL.EMPLOYEE,
     );
 
-    return employee;
+    return this.toCacheable(employee);
   }
 
   /**
@@ -139,8 +219,9 @@ export class EmployeesService {
   }
 
   /**
-   * Strips the password hash from the nested user relation before caching.
-   * Credentials must never be written to Redis.
+   * Strips the password hash from the nested user relation. Credentials must
+   * never be written to Redis or returned to the client, so every public read
+   * and write response is passed through this helper.
    */
   private toCacheable(employee: Employee): Employee {
     if (!employee.user) {
@@ -211,7 +292,7 @@ export class EmployeesService {
       newValues: dto,
     });
 
-    return updatedEmployee;
+    return this.toCacheable(updatedEmployee);
   }
 
   async remove(id: string) {
@@ -251,20 +332,28 @@ export class EmployeesService {
       await this.cacheInvalidation.invalidateDepartment(previousDepartmentId);
     }
 
-    return saved;
+    return this.toCacheable(saved);
   }
 
   async assignUser(id: string, userId: string) {
     const employee = await this.findOneFresh(id);
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['employee'],
+    });
 
     if (!user) {
       throw new NotFoundException('User account not found');
     }
 
+    // A user may only be linked to one employee (employees.userId is unique).
+    if (user.employee && user.employee.id !== employee.id) {
+      throw new ConflictException('User already has an employee profile.');
+    }
+
     if (employee.role !== Role.admin && employee.role !== Role.manager) {
       throw new BadRequestException(
-        'Only Admin and Manager employees can be assigned a user account',
+        `Only Admin and Manager employees can be assigned a user account (received role: "${employee.role}")`,
       );
     }
 
@@ -277,7 +366,7 @@ export class EmployeesService {
 
     await this.cacheInvalidation.onEmployeeChanged(id, userId);
 
-    return saved;
+    return this.toCacheable(saved);
   }
 
   async uploadProfilePicture(id: string, file: UploadedProfilePictureFile) {
@@ -337,6 +426,6 @@ export class EmployeesService {
 
     await this.cacheInvalidation.invalidateEmployee(employee.id);
 
-    return employee;
+    return this.toCacheable(employee);
   }
 }

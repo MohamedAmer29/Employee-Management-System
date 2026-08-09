@@ -92,7 +92,7 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all users with employee relation', async () => {
+    it('should return all users with employee relation without passwords', async () => {
       userRepository.find.mockResolvedValue([user]);
 
       const result = await service.findAll();
@@ -100,12 +100,16 @@ describe('UsersService', () => {
       expect(userRepository.find).toHaveBeenCalledWith({
         relations: ['employee'],
       });
-      expect(result).toEqual([user]);
+      expect(result[0]).not.toHaveProperty('password');
+      expect(result[0]).toMatchObject({
+        id: 'user-1',
+        username: 'janedoe',
+      });
     });
   });
 
   describe('findOne', () => {
-    it('should return the user when found', async () => {
+    it('should return the user without the password when found', async () => {
       userRepository.findOne.mockResolvedValue(user);
 
       const result = await service.findOne('user-1');
@@ -114,7 +118,8 @@ describe('UsersService', () => {
         where: { id: 'user-1' },
         relations: ['employee'],
       });
-      expect(result).toBe(user);
+      expect(result).not.toHaveProperty('password');
+      expect(result).toMatchObject({ id: 'user-1' });
     });
 
     it('should throw NotFoundException when user not found', async () => {
@@ -212,7 +217,9 @@ describe('UsersService', () => {
 
       const result = await service.remove('user-1');
 
-      expect(userRepository.remove).toHaveBeenCalledWith(user);
+      expect(userRepository.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-1' }),
+      );
       expect(result).toEqual({ message: 'User deleted' });
     });
   });

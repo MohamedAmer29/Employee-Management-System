@@ -83,6 +83,44 @@ describe('AllExceptionsFilter', () => {
     );
   });
 
+  it('should surface a message for constraint-less (whitelist) validation errors', () => {
+    const exception = new BadRequestException({
+      message: [{ property: 'firstName' }, { property: 'lastName' }],
+    });
+
+    filter.catch(exception, host);
+
+    expect(jsonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Validation failed',
+        errorCode: ErrorCode.VALIDATION_ERROR,
+        errors: [
+          { field: 'firstName', messages: ['firstName is not allowed'] },
+          { field: 'lastName', messages: ['lastName is not allowed'] },
+        ],
+      }),
+    );
+  });
+
+  it('should surface flattened string validation messages', () => {
+    const exception = new BadRequestException({
+      message: ['fullName must be a string', 'email must be an email'],
+    });
+
+    filter.catch(exception, host);
+
+    expect(jsonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Validation failed',
+        errorCode: ErrorCode.VALIDATION_ERROR,
+        errors: [
+          { field: 'unknown', messages: ['fullName must be a string'] },
+          { field: 'unknown', messages: ['email must be an email'] },
+        ],
+      }),
+    );
+  });
+
   it('should preserve a custom error code from the exception response', () => {
     const exception = new HttpException(
       { message: 'Custom error', errorCode: ErrorCode.CONFLICT },

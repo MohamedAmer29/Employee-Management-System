@@ -41,7 +41,9 @@ export class UsersService {
   }
 
   findAll() {
-    return this.userRepository.find({ relations: ['employee'] });
+    return this.userRepository
+      .find({ relations: ['employee'] })
+      .then((users) => users.map((user) => this.sanitizeUser(user)));
   }
 
   async findOne(id: string) {
@@ -50,7 +52,18 @@ export class UsersService {
       relations: ['employee'],
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    return this.sanitizeUser(user);
+  }
+
+  /**
+   * Removes the password hash before a user object leaves the service. Never
+   * strip the nested employee relation - it is loaded through the TypeORM
+   * relationship (user.employee) and is safe to expose.
+   */
+  private sanitizeUser(user: User): User {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...safeUser } = user;
+    return safeUser as User;
   }
 
   async update(id: string, dto: UpdateUserDto) {

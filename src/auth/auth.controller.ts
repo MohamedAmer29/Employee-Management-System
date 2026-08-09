@@ -71,12 +71,8 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 429, description: 'Too many requests' })
-  register(
-    @Body() dto: RegisterDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    return this.authService.register(dto, req, res);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.authService.register(dto, req);
   }
 
   @Post('login')

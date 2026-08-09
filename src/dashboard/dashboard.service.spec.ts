@@ -11,6 +11,7 @@ import { AuditLog } from '../audit-logs/audit-log.entity';
 import { Department } from '../department/entities/department.entity';
 import { User } from '../users/entities/user.entity';
 import { DashboardPeriod } from './enums/dashboard-period.enum';
+import { RedisService } from '../redis/redis.service';
 
 type MockRepository = Record<string, jest.Mock>;
 type MockQueryBuilder = ReturnType<typeof createQueryBuilderMock>;
@@ -114,6 +115,19 @@ describe('DashboardService', () => {
           useValue: repositories.Department,
         },
         { provide: getRepositoryToken(User), useValue: repositories.User },
+        {
+          provide: RedisService,
+          useValue: {
+            rememberWithLock: jest.fn(
+              <T>(_key: string, _lockKey: string, _ttl: number, loader: () => Promise<T>) =>
+                loader(),
+            ),
+            remember: jest.fn(
+              <T>(_key: string, _ttl: number, loader: () => Promise<T>) =>
+                loader(),
+            ),
+          },
+        },
       ],
     }).compile();
 
@@ -165,6 +179,39 @@ describe('DashboardService', () => {
           recentActivities: expect.any(Array),
         }),
       );
+    });
+
+    it('should map employeesPerDepartment rows from quoted aliases', async () => {
+      repositories.Employee.count.mockResolvedValue(10);
+      repositories.User.count.mockResolvedValue(10);
+      repositories.Attendance.count.mockResolvedValue(5);
+      repositories.LeaveRequest.count.mockResolvedValue(3);
+      repositories.PerformanceReview.count.mockResolvedValue(2);
+      repositories.Notification.count.mockResolvedValue(7);
+      repositories.Department.count.mockResolvedValue(4);
+      queryBuilders.Employee.getRawMany.mockResolvedValue([
+        {
+          departmentId: '1',
+          departmentName: 'Engineering',
+          employeeCount: '5',
+        },
+        { departmentId: '2', departmentName: 'HR', employeeCount: '2' },
+      ]);
+
+      const result = await service.getAdminDashboard();
+
+      const selectArgs = queryBuilders.Employee.select.mock.calls[0][0];
+      expect(selectArgs).toEqual(
+        expect.arrayContaining([
+          'department.id AS "departmentId"',
+          'department.name AS "departmentName"',
+          'COUNT(employee.id) AS "employeeCount"',
+        ]),
+      );
+      expect(result.employeesPerDepartment).toEqual([
+        { departmentId: '1', departmentName: 'Engineering', employeeCount: 5 },
+        { departmentId: '2', departmentName: 'HR', employeeCount: 2 },
+      ]);
     });
   });
 
