@@ -13,6 +13,9 @@ const REQUIRED_VARIABLES = [
   'MAIL_PASSWORD',
   'MAIL_FROM',
   'OTP_EXPIRES_IN',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
 ] as const;
 
 export function validateEnv(

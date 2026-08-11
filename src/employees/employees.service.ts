@@ -13,6 +13,13 @@ type UploadedProfilePictureFile = {
   buffer: Buffer;
   size: number;
 };
+
+/**
+ * Profile pictures live on the linked user account (the single source of
+ * truth). Employee responses still expose them at the top level so the API
+ * shape stays stable for the frontend.
+ */
+type EmployeeResponse = Employee & { profilePicture: string | null };
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
@@ -27,8 +34,7 @@ import { EmployeeUpdatedEvent } from '../common/events/employee-updated.event';
 import { RedisService } from '../redis/redis.service';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
-import * as fs from 'fs';
-import * as path from 'path';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class EmployeesService {
@@ -42,8 +48,8 @@ export class EmployeesService {
     private readonly eventEmitter: EventEmitter2,
     private readonly redisService: RedisService,
     private readonly cacheInvalidation: CacheInvalidationService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
-
   async create(dto: CreateEmployeeDto) {
     let user: User | undefined;
 
@@ -135,7 +141,7 @@ export class EmployeesService {
    * as the password hash, nationalId or tokenVersion is never loaded or
    * cached. Rows are returned in a deterministic order.
    */
-  findAll(): Promise<Employee[]> {
+  findAll(): Promise<EmployeeResponse[]> {
     return this.redisService.rememberWithLock(
       RedisKeys.employeesList(),
       RedisKeys.employeesListLock(),
@@ -153,7 +159,6 @@ export class EmployeesService {
             'employee.phone',
             'employee.position',
             'employee.role',
-            'employee.profilePicture',
             'employee.createdAt',
             'department.id',
             'department.name',
@@ -162,9 +167,11 @@ export class EmployeesService {
             'user.lastName',
             'user.username',
             'user.role',
+            'user.profilePicture',
           ])
           .orderBy('employee.createdAt', 'DESC')
-          .getMany(),
+          .getMany()
+          .then((employees) => employees.map((e) => this.toCacheable(e))),
       CACHE_TTL.LOCK,
     );
   }
@@ -174,8 +181,8 @@ export class EmployeesService {
    * PostgreSQL is queried and the result stored for CACHE_TTL.EMPLOYEE seconds.
    * If Redis is unavailable the query falls through to PostgreSQL transparently.
    */
-  async findOne(id: string): Promise<Employee> {
-    const cached = await this.redisService.getJson<Employee>(
+  async findOne(id: string): Promise<EmployeeResponse> {
+    const cached = await this.redisService.getJson<EmployeeResponse>(
       RedisKeys.employee(id),
     );
 
@@ -219,13 +226,16 @@ export class EmployeesService {
   }
 
   /**
-   * Strips the password hash from the nested user relation. Credentials must
-   * never be written to Redis or returned to the client, so every public read
-   * and write response is passed through this helper.
+   * Strips the password hash from the nested user relation and lifts the
+   * profile picture (which lives on the user) up to the employee top level.
+   * Credentials must never be written to Redis or returned to the client, so
+   * every public read and write response is passed through this helper.
    */
-  private toCacheable(employee: Employee): Employee {
+  private toCacheable(employee: Employee): EmployeeResponse {
+    const profilePicture = employee.user?.profilePicture ?? null;
+
     if (!employee.user) {
-      return employee;
+      return { ...employee, profilePicture };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -233,6 +243,7 @@ export class EmployeesService {
 
     return {
       ...employee,
+      profilePicture,
       user: safeUser as User,
     };
   }
@@ -372,7 +383,16 @@ export class EmployeesService {
   async uploadProfilePicture(id: string, file: UploadedProfilePictureFile) {
     const employee = await this.findOneFresh(id);
 
-    return this.saveProfilePicture(employee, file);
+    if (!employee.user) {
+      throw new BadRequestException(
+        'Employee must have a linked user account to set a profile picture',
+      );
+    }
+
+    await this.saveUserProfilePicture(employee.user, file);
+    await this.cacheInvalidation.invalidateEmployee(employee.id);
+
+    return this.toCacheable(employee);
   }
 
   async uploadMyProfilePicture(
@@ -388,44 +408,34 @@ export class EmployeesService {
       throw new NotFoundException('Employee not found for current user');
     }
 
-    const employee = await this.employeeRepository.findOne({
-      where: { id: user.employee.id },
-      relations: ['department', 'user'],
-    });
+    await this.saveUserProfilePicture(user, file);
 
-    if (!employee) {
-      throw new NotFoundException('Employee not found');
-    }
+    const employee = await this.findOneFresh(user.employee.id);
+    await this.cacheInvalidation.invalidateEmployee(employee.id);
 
-    return this.saveProfilePicture(employee, file);
+    return this.toCacheable(employee);
   }
 
-  private async saveProfilePicture(
-    employee: Employee,
+  /**
+   * Profile pictures live on the user account (the single source of truth),
+   * so both employee upload endpoints write here.
+   */
+  private async saveUserProfilePicture(
+    user: User,
     file: UploadedProfilePictureFile,
-  ) {
+  ): Promise<void> {
     if (!file) {
       throw new BadRequestException('Profile picture file is required');
     }
 
-    if (employee.role !== Role.employee) {
-      throw new BadRequestException(
-        'Profile picture upload is only allowed for Employee role',
-      );
+    const profilePicture = await this.cloudinaryService.uploadImage(file);
+
+    if (user.profilePicture) {
+      await this.cloudinaryService.deleteImage(user.profilePicture);
     }
 
-    const uploadDir = path.join(process.cwd(), 'uploads', 'profile-pictures');
-    fs.mkdirSync(uploadDir, { recursive: true });
-
-    const fileName = `${Date.now()}-${file.originalname}`;
-    const filePath = path.join(uploadDir, fileName);
-    fs.writeFileSync(filePath, file.buffer);
-
-    employee.profilePicture = `/uploads/profile-pictures/${fileName}`;
-    await this.employeeRepository.save(employee);
-
-    await this.cacheInvalidation.invalidateEmployee(employee.id);
-
-    return this.toCacheable(employee);
+    user.profilePicture = profilePicture;
+    await this.userRepository.save(user);
+    this.eventEmitter.emit('user.changed');
   }
 }

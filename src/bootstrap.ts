@@ -2,6 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import express from 'express';
+import { join } from 'node:path';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 /**
@@ -30,6 +32,9 @@ export function configureApp(app: INestApplication): void {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   app.use(cookieParser());
+
+  // Serve uploaded files (profile pictures, etc.) statically.
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   // CORS for local Vite dev server (port 5173) + credentials (cookies)
   app.enableCors({

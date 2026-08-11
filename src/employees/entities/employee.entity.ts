@@ -40,9 +40,6 @@ export class Employee {
   @Column({ type: 'enum', enum: Role, nullable: true })
   role!: Role;
 
-  @Column({ nullable: true })
-  profilePicture?: string;
-
   @ManyToOne(() => Department, (dept) => dept.employees, { nullable: true })
   @Index()
   department?: Department;

@@ -5,6 +5,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
 import { Role } from '../auth/interfaces/Role.enum';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -23,6 +24,10 @@ describe('UsersService', () => {
     create: jest.Mock;
     save: jest.Mock;
     remove: jest.Mock;
+  };
+  let cloudinaryService: {
+    uploadImage: jest.Mock;
+    deleteImage: jest.Mock;
   };
 
   const user = {
@@ -48,12 +53,17 @@ describe('UsersService', () => {
       save: jest.fn(),
       remove: jest.fn(),
     };
+    cloudinaryService = {
+      uploadImage: jest.fn(),
+      deleteImage: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        { provide: CloudinaryService, useValue: cloudinaryService },
       ],
     }).compile();
 
@@ -207,6 +217,54 @@ describe('UsersService', () => {
       const result = await service.activate('user-1');
 
       expect(result.isActive).toBe(true);
+    });
+  });
+
+  describe('uploadProfilePicture', () => {
+    const file = {
+      originalname: 'photo.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('fake-image'),
+      size: 10,
+    };
+
+    it('should upload to Cloudinary and store the URL on the user', async () => {
+      const userWithPicture = {
+        ...user,
+        profilePicture:
+          'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/old.jpg',
+      } as unknown as User;
+
+      userRepository.findOne.mockResolvedValue(userWithPicture);
+      cloudinaryService.uploadImage.mockResolvedValue(
+        'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/profile-pictures/new.jpg',
+      );
+      userRepository.save.mockResolvedValue({
+        ...userWithPicture,
+        profilePicture:
+          'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/profile-pictures/new.jpg',
+      });
+
+      const result = await service.uploadProfilePicture('user-1', file);
+
+      expect(userRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+      });
+      expect(cloudinaryService.uploadImage).toHaveBeenCalledWith(file);
+      expect(cloudinaryService.deleteImage).toHaveBeenCalledWith(
+        'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/old.jpg',
+      );
+      expect(userRepository.save).toHaveBeenCalled();
+      expect(result.profilePicture).toContain('res.cloudinary.com');
+      expect(result).not.toHaveProperty('password');
+    });
+
+    it('should throw NotFoundException when the user does not exist', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.uploadProfilePicture('missing', file),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

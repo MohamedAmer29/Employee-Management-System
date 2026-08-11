@@ -13,12 +13,21 @@ import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+
+type UploadedProfilePictureFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+};
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User) private userRepository: Repository<User>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async create(dto: RegisterDto) {
@@ -125,6 +134,32 @@ export class UsersService {
     const saved = await this.userRepository.save(user);
     this.eventEmitter.emit('user.changed');
     return saved;
+  }
+
+  /**
+   * Uploads a profile picture for the given user to Cloudinary and stores the
+   * secure URL. Any previous image is removed from Cloudinary so orphaned
+   * assets do not accumulate. The user table is the single source of truth
+   * for profile pictures.
+   */
+  async uploadProfilePicture(userId: string, file: UploadedProfilePictureFile) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const profilePicture = await this.cloudinaryService.uploadImage(file);
+
+    if (user.profilePicture) {
+      await this.cloudinaryService.deleteImage(user.profilePicture);
+    }
+
+    user.profilePicture = profilePicture;
+    const saved = await this.userRepository.save(user);
+    this.eventEmitter.emit('user.changed');
+
+    return this.sanitizeUser(saved);
   }
 
   async remove(id: string) {

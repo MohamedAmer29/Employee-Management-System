@@ -39,6 +39,9 @@ export class User {
   @Column()
   password!: string;
 
+  @Column({ nullable: true })
+  profilePicture?: string;
+
   @Column({ type: 'enum', enum: Role })
   role!: Role;
 

@@ -7,8 +7,17 @@ import {
   Delete,
   UseGuards,
   Patch,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiOperation,
+} from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -19,6 +28,15 @@ import { RolesGuard } from '../auth/guards/role.guard';
 import { Roles } from '../auth/role.decorator';
 import { Role } from '../auth/interfaces/Role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+
+type UploadedProfilePictureFile = {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+};
 
 @ApiTags('users')
 @ApiBearerAuth('Authorization')
@@ -59,6 +77,51 @@ export class UsersController {
     @Body() dto: ResetPasswordDto,
   ) {
     return this.usersService.resetPassword(userId, dto);
+  }
+
+  @Post('me/profile-picture')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Upload my profile picture to Cloudinary' })
+  uploadMyProfilePicture(
+    @CurrentUser('userId') userId: string,
+    @UploadedFile() file: UploadedProfilePictureFile,
+  ) {
+    return this.usersService.uploadProfilePicture(userId, file);
+  }
+
+  @Post(':id/profile-picture')
+  @Roles(Role.admin)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Upload a user profile picture as admin' })
+  uploadProfilePicture(
+    @Param('id') id: string,
+    @UploadedFile() file: UploadedProfilePictureFile,
+  ) {
+    return this.usersService.uploadProfilePicture(id, file);
   }
 
   @Patch('me/deactivate')

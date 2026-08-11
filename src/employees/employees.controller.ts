@@ -122,7 +122,6 @@ export class EmployeesController {
   }
 
   @Post('me/profile-picture')
-  @Roles(Role.employee)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({

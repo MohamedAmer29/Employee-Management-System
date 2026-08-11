@@ -15,6 +15,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RedisModule } from './redis/redis.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { OtpModule } from './otp/otp.module';
@@ -24,6 +25,7 @@ import { validateEnv } from './config/env.validation';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     RedisModule,
+    CloudinaryModule,
     MailModule,
     OtpModule,
     AuthModule,

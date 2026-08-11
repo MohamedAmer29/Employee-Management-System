@@ -13,14 +13,7 @@ import { User } from '../users/entities/user.entity';
 import { Role } from '../auth/interfaces/Role.enum';
 import { RedisService } from '../redis/redis.service';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
-
-jest.mock('fs', () => ({
-  ...jest.requireActual<typeof import('fs')>('fs'),
-  mkdirSync: jest.fn(),
-  writeFileSync: jest.fn(),
-}));
-
-import * as fs from 'fs';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 describe('EmployeesService', () => {
   let service: EmployeesService;
@@ -46,6 +39,10 @@ describe('EmployeesService', () => {
     onDepartmentChanged: jest.Mock;
     invalidateDepartment: jest.Mock;
     invalidateEmployee: jest.Mock;
+  };
+  let cloudinaryService: {
+    uploadImage: jest.Mock;
+    deleteImage: jest.Mock;
   };
 
   const department = { id: 'dept-1', name: 'Engineering' } as Department;
@@ -99,6 +96,10 @@ describe('EmployeesService', () => {
       invalidateDepartment: jest.fn(),
       invalidateEmployee: jest.fn(),
     };
+    cloudinaryService = {
+      uploadImage: jest.fn(),
+      deleteImage: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -112,6 +113,7 @@ describe('EmployeesService', () => {
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: RedisService, useValue: redisService },
         { provide: CacheInvalidationService, useValue: cacheInvalidation },
+        { provide: CloudinaryService, useValue: cloudinaryService },
       ],
     }).compile();
 
@@ -323,7 +325,10 @@ describe('EmployeesService', () => {
         'employee.createdAt',
         'DESC',
       );
-      expect(result).toEqual([employee]);
+      expect(mockQueryBuilder.select).toHaveBeenCalledWith(
+        expect.arrayContaining(['user.profilePicture']),
+      );
+      expect(result).toEqual([{ ...employee, profilePicture: null }]);
     });
 
     it('should return an employee when found', async () => {
@@ -479,36 +484,140 @@ describe('EmployeesService', () => {
       size: 10,
     };
 
+    const makeUserWithPicture = () =>
+      ({
+        id: 'user-1',
+        role: Role.employee,
+        profilePicture:
+          'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/old.jpg',
+      }) as unknown as User;
+
+    const newPictureUrl =
+      'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/profile-pictures/photo.jpg';
+
     it('should throw BadRequestException when no file provided', async () => {
-      employeeRepository.findOne.mockResolvedValue(employee);
+      employeeRepository.findOne.mockResolvedValue({
+        ...employee,
+        user: makeUserWithPicture(),
+      } as unknown as Employee);
 
       await expect(
         service.uploadProfilePicture('emp-1', undefined as any),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException for non-employee roles', async () => {
+    it('should throw BadRequestException when the employee has no linked user', async () => {
+      employeeRepository.findOne.mockResolvedValue({
+        ...employee,
+        user: undefined,
+      } as unknown as Employee);
+
+      await expect(
+        service.uploadProfilePicture('emp-1', file),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow profile picture upload for non-Employee roles', async () => {
       const adminEmployee = {
         ...employee,
         role: Role.admin,
+        user: makeUserWithPicture(),
       } as unknown as Employee;
       employeeRepository.findOne.mockResolvedValue(adminEmployee);
-
-      await expect(service.uploadProfilePicture('emp-1', file)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should save the file and update the profile picture', async () => {
-      employeeRepository.findOne.mockResolvedValue(employee);
-      employeeRepository.save.mockResolvedValue(employee);
+      cloudinaryService.uploadImage.mockResolvedValue(newPictureUrl);
 
       const result = await service.uploadProfilePicture('emp-1', file);
 
-      expect(fs.mkdirSync).toHaveBeenCalled();
-      expect(fs.writeFileSync).toHaveBeenCalled();
-      expect(result.profilePicture).toContain('/uploads/profile-pictures/');
-      expect(employeeRepository.save).toHaveBeenCalled();
+      expect(cloudinaryService.uploadImage).toHaveBeenCalledWith(file);
+      expect(userRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'user-1',
+          profilePicture: newPictureUrl,
+        }),
+      );
+      expect(employeeRepository.save).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith('user.changed');
+      expect(cacheInvalidation.invalidateEmployee).toHaveBeenCalledWith(
+        'emp-1',
+      );
+      expect(result.profilePicture).toContain('res.cloudinary.com');
+    });
+
+    it('should delete the old picture and store the new one on the user', async () => {
+      const userWithPicture = makeUserWithPicture();
+      employeeRepository.findOne.mockResolvedValue({
+        ...employee,
+        user: userWithPicture,
+      } as unknown as Employee);
+      cloudinaryService.uploadImage.mockResolvedValue(newPictureUrl);
+
+      const result = await service.uploadProfilePicture('emp-1', file);
+
+      expect(cloudinaryService.deleteImage).toHaveBeenCalledWith(
+        'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/old.jpg',
+      );
+      expect(userRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ profilePicture: newPictureUrl }),
+      );
+      expect(result.profilePicture).toContain('res.cloudinary.com');
+    });
+  });
+
+  describe('uploadMyProfilePicture', () => {
+    const file = {
+      fieldname: 'profilePicture',
+      originalname: 'photo.png',
+      encoding: '7bit',
+      mimetype: 'image/png',
+      buffer: Buffer.from('fake-image'),
+      size: 10,
+    };
+
+    const newPictureUrl =
+      'https://res.cloudinary.com/dvak5lwwy/image/upload/v1/profile-pictures/photo.jpg';
+
+    it('should update the current user picture and return the employee', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        role: Role.employee,
+        profilePicture: null,
+        employee: { id: 'emp-1' },
+      } as unknown as User);
+      employeeRepository.findOne.mockResolvedValue({
+        ...employee,
+        user: {
+          id: 'user-1',
+          role: Role.employee,
+          profilePicture: newPictureUrl,
+        } as unknown as User,
+      } as unknown as Employee);
+      cloudinaryService.uploadImage.mockResolvedValue(newPictureUrl);
+
+      const result = await service.uploadMyProfilePicture('user-1', file);
+
+      expect(userRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'user-1',
+          profilePicture: newPictureUrl,
+        }),
+      );
+      expect(cacheInvalidation.invalidateEmployee).toHaveBeenCalledWith(
+        'emp-1',
+      );
+      expect(result.profilePicture).toContain('res.cloudinary.com');
+    });
+
+    it('should throw NotFoundException when the user has no employee record', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        role: Role.employee,
+        profilePicture: null,
+        employee: null,
+      } as unknown as User);
+
+      await expect(
+        service.uploadMyProfilePicture('user-1', file),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
