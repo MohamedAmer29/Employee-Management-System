@@ -24,7 +24,7 @@ export class CreateEmployeeDto {
   email!: string;
 
   @ApiProperty({ description: 'Employee phone number' })
-  @IsPhoneNumber(undefined, { message: 'Invalid phone number' })
+  @IsPhoneNumber('EG', { message: 'Invalid phone number' })
   phone!: string;
 
   @ApiProperty({ description: 'Employee position' })
