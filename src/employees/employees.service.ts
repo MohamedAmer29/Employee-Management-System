@@ -390,7 +390,7 @@ export class EmployeesService {
     }
 
     await this.saveUserProfilePicture(employee.user, file);
-    await this.cacheInvalidation.invalidateEmployee(employee.id);
+    await this.invalidateProfilePictureCaches(employee);
 
     return this.toCacheable(employee);
   }
@@ -411,9 +411,25 @@ export class EmployeesService {
     await this.saveUserProfilePicture(user, file);
 
     const employee = await this.findOneFresh(user.employee.id);
-    await this.cacheInvalidation.invalidateEmployee(employee.id);
+    await this.invalidateProfilePictureCaches(employee);
 
     return this.toCacheable(employee);
+  }
+
+  /**
+   * Profile pictures surface in the employee caches and in the department
+   * responses (which embed each employee's picture), so a picture change must
+   * invalidate both.
+   */
+  private async invalidateProfilePictureCaches(
+    employee: Employee,
+  ): Promise<void> {
+    await this.cacheInvalidation.invalidateEmployee(employee.id);
+    if (employee.department?.id) {
+      await this.cacheInvalidation.invalidateDepartment(employee.department.id);
+    } else {
+      await this.cacheInvalidation.invalidateDepartmentsList();
+    }
   }
 
   /**

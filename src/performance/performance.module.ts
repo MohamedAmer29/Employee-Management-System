@@ -10,5 +10,6 @@ import { Employee } from '../employees/entities/employee.entity';
   imports: [TypeOrmModule.forFeature([PerformanceReview, User, Employee])],
   controllers: [PerformanceController],
   providers: [PerformanceService],
+  exports: [PerformanceService],
 })
 export class PerformanceModule {}

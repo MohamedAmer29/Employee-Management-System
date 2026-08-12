@@ -125,15 +125,19 @@ export class LeaveService {
   }
 
   async findAll(role: string, userId: string) {
+    const relations = ['employee', 'employee.user'];
+
     if (role !== Role.employee) {
-      return this.leaveRepository.find({ relations: ['employee'] });
+      const leaves = await this.leaveRepository.find({ relations });
+      return leaves.map((leave) => this.toResponse(leave));
     }
 
     const employee = await this.getEmployeeForUser(userId);
-    return this.leaveRepository.find({
+    const leaves = await this.leaveRepository.find({
       where: { employee: { id: employee.id } },
-      relations: ['employee'],
+      relations,
     });
+    return leaves.map((leave) => this.toResponse(leave));
   }
 
   async findByEmployee(employeeId: string) {
@@ -145,10 +149,27 @@ export class LeaveService {
       throw new NotFoundException('Employee not found');
     }
 
-    return this.leaveRepository.find({
+    const leaves = await this.leaveRepository.find({
       where: { employee: { id: employeeId } },
-      relations: ['employee'],
+      relations: ['employee', 'employee.user'],
     });
+    return leaves.map((leave) => this.toResponse(leave));
+  }
+
+  /**
+   * Lifts the employee's profile picture (which lives on the linked user
+   * account) up to the nested employee object and strips the user relation so
+   * credentials and other user fields are never returned to the client.
+   */
+  private toResponse(leave: LeaveRequest) {
+    const { user, ...employee } = leave.employee;
+    return {
+      ...leave,
+      employee: {
+        ...employee,
+        profilePicture: user?.profilePicture ?? null,
+      },
+    };
   }
 
   private async getEmployeeForUser(userId: string) {

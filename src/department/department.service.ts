@@ -13,6 +13,14 @@ import { RedisService } from '../redis/redis.service';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
 import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
 
+type DepartmentEmployeeResponse = Omit<Employee, 'user'> & {
+  profilePicture: string | null;
+};
+
+type DepartmentResponse = Omit<Department, 'employees'> & {
+  employees: DepartmentEmployeeResponse[];
+};
+
 @Injectable()
 export class DepartmentService {
   constructor(
@@ -35,11 +43,16 @@ export class DepartmentService {
     return saved;
   }
 
-  findAll(): Promise<Department[]> {
+  findAll(): Promise<DepartmentResponse[]> {
     return this.redisService.remember(
       RedisKeys.departmentsList(),
       CACHE_TTL.DEPARTMENTS_LIST,
-      () => this.departmentRepository.find({ relations: ['employees'] }),
+      async () => {
+        const departments = await this.departmentRepository.find({
+          relations: ['employees', 'employees.user'],
+        });
+        return departments.map((department) => this.toResponse(department));
+      },
     );
   }
 
@@ -47,8 +60,8 @@ export class DepartmentService {
    * Cache-aside read for a single department. Falls back to PostgreSQL on a
    * cache miss or whenever Redis is unavailable.
    */
-  async findOne(id: string): Promise<Department> {
-    const cached = await this.redisService.getJson<Department>(
+  async findOne(id: string): Promise<DepartmentResponse> {
+    const cached = await this.redisService.getJson<DepartmentResponse>(
       RedisKeys.department(id),
     );
 
@@ -57,20 +70,21 @@ export class DepartmentService {
     }
 
     const department = await this.findOneFresh(id);
+    const response = this.toResponse(department);
 
     await this.redisService.setJson(
       RedisKeys.department(id),
-      department,
+      response,
       CACHE_TTL.DEPARTMENT,
     );
 
-    return department;
+    return response;
   }
 
   private async findOneFresh(id: string): Promise<Department> {
     const department = await this.departmentRepository.findOne({
       where: { id },
-      relations: ['employees'],
+      relations: ['employees', 'employees.user'],
     });
 
     if (!department) {
@@ -78,6 +92,22 @@ export class DepartmentService {
     }
 
     return department;
+  }
+
+  /**
+   * Lifts each employee's profile picture (which lives on the linked user
+   * account) up to the employee top level and strips the nested user relation
+   * so credentials and other user fields are never returned to the client or
+   * written to Redis.
+   */
+  private toResponse(department: Department): DepartmentResponse {
+    return {
+      ...department,
+      employees: (department.employees ?? []).map(({ user, ...employee }) => ({
+        ...employee,
+        profilePicture: user?.profilePicture ?? null,
+      })),
+    };
   }
 
   async update(id: string, dto: UpdateDepartmentDto) {
@@ -92,7 +122,7 @@ export class DepartmentService {
 
     await this.cacheInvalidation.onDepartmentChanged(id);
 
-    return saved;
+    return this.toResponse(saved);
   }
 
   async assignEmployees(id: string, employeeIds: string[]) {

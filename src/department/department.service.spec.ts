@@ -112,7 +112,7 @@ describe('DepartmentService', () => {
       const result = await service.findAll();
 
       expect(departmentRepository.find).toHaveBeenCalledWith({
-        relations: ['employees'],
+        relations: ['employees', 'employees.user'],
       });
       expect(result).toEqual([department]);
     });
@@ -122,7 +122,36 @@ describe('DepartmentService', () => {
 
       const result = await service.findOne('dept-1');
 
-      expect(result).toBe(department);
+      expect(result).toEqual(department);
+    });
+
+    it('should lift employee profile pictures and strip the user relation', async () => {
+      departmentRepository.find.mockResolvedValue([
+        {
+          ...department,
+          employees: [
+            {
+              id: 'emp-1',
+              fullName: 'Jane Doe',
+              user: {
+                id: 'u-1',
+                password: 'secret',
+                profilePicture: 'https://img.example/pic.jpg',
+              },
+            },
+          ] as unknown as Employee[],
+        } as unknown as Department,
+      ]);
+
+      const result = await service.findAll();
+
+      expect(result[0].employees).toEqual([
+        {
+          id: 'emp-1',
+          fullName: 'Jane Doe',
+          profilePicture: 'https://img.example/pic.jpg',
+        },
+      ]);
     });
 
     it('should throw NotFoundException when department not found', async () => {

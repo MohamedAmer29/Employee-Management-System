@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -15,6 +14,7 @@ import { Role } from '../auth/interfaces/Role.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { PerformanceReviewCreatedEvent } from '../common/events/performance-review-created.event';
+import { CacheInvalidationService } from '@/redis/cache-invalidation.service';
 
 @Injectable()
 export class PerformanceService {
@@ -26,6 +26,7 @@ export class PerformanceService {
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cacheInvalidation: CacheInvalidationService,
   ) {}
 
   async create(userId: string, dto: CreatePerformanceDto) {
@@ -85,19 +86,25 @@ export class PerformanceService {
       },
     });
 
+    await this.invalidateDashboards();
+
     return savedReview;
   }
 
   async findAll(role: Role, userId: string) {
+    const relations = ['employee', 'employee.user'];
+
     if (role === Role.employee) {
       const employee = await this.getEmployeeForUser(userId);
-      return this.performanceRepository.find({
+      const reviews = await this.performanceRepository.find({
         where: { employee: { id: employee.id } },
-        relations: ['employee'],
+        relations,
       });
+      return reviews.map((review) => this.toResponse(review));
     }
 
-    return this.performanceRepository.find({ relations: ['employee'] });
+    const reviews = await this.performanceRepository.find({ relations });
+    return reviews.map((review) => this.toResponse(review));
   }
 
   async update(id: string, dto: UpdatePerformanceDto) {
@@ -132,7 +139,11 @@ export class PerformanceService {
       review.reviewDate = dto.reviewDate;
     }
 
-    return this.performanceRepository.save(review);
+    const updated = await this.performanceRepository.save(review);
+
+    await this.invalidateDashboards();
+
+    return updated;
   }
 
   async remove(id: string) {
@@ -145,6 +156,9 @@ export class PerformanceService {
     }
 
     await this.performanceRepository.remove(review);
+
+    await this.invalidateDashboards();
+
     return { message: 'Performance review deleted' };
   }
 
@@ -159,5 +173,34 @@ export class PerformanceService {
     }
 
     return user.employee;
+  }
+
+  /**
+   * Lifts the employee's profile picture (which lives on the linked user
+   * account) up to the nested employee object and strips the user relation so
+   * credentials and other user fields are never returned to the client.
+   */
+  /**
+   * Performance mutations change the average rating, total reviews and rating
+   * distribution that the admin and manager dashboards aggregate, so both
+   * dashboard caches must be dropped immediately. Otherwise the dashboard keeps
+   * showing stale figures until the Redis TTL expires.
+   */
+  private async invalidateDashboards(): Promise<void> {
+    await Promise.all([
+      this.cacheInvalidation.invalidateAdminDashboard(),
+      this.cacheInvalidation.invalidateAllManagerDashboards(),
+    ]);
+  }
+
+  private toResponse(review: PerformanceReview) {
+    const { user, ...employee } = review.employee;
+    return {
+      ...review,
+      employee: {
+        ...employee,
+        profilePicture: user?.profilePicture ?? null,
+      },
+    };
   }
 }

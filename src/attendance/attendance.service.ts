@@ -5,13 +5,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { EmployeesService } from '../employees/employees.service';
 import { UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { AttendanceRecordedEvent } from '../common/events/attendance-recorded.event';
+
+type AttendanceEmployeeResponse = Omit<Employee, 'user'> & {
+  profilePicture: string | null;
+};
+
+type AttendanceResponse = Omit<Attendance, 'employee'> & {
+  employee: AttendanceEmployeeResponse;
+};
 
 @Injectable()
 export class AttendanceService {
@@ -123,17 +132,40 @@ export class AttendanceService {
     };
   }
 
-  findAll() {
-    return this.attendanceRepository.find({ relations: ['employee'] });
+  findAll(): Promise<AttendanceResponse[]> {
+    return this.findAllWithEmployee({});
   }
 
-  async findByEmployee(employeeId: string) {
+  async findByEmployee(employeeId: string): Promise<AttendanceResponse[]> {
     await this.employeesService.findOne(employeeId);
 
-    return this.attendanceRepository.find({
-      where: { employee: { id: employeeId } },
-      relations: ['employee'],
+    return this.findAllWithEmployee({ employee: { id: employeeId } });
+  }
+
+  private async findAllWithEmployee(
+    where: FindOptionsWhere<Attendance>,
+  ): Promise<AttendanceResponse[]> {
+    const records = await this.attendanceRepository.find({
+      where,
+      relations: ['employee', 'employee.user'],
     });
+    return records.map((record) => this.toResponse(record));
+  }
+
+  /**
+   * Lifts the employee's profile picture (which lives on the linked user
+   * account) up to the nested employee object and strips the user relation so
+   * credentials and other user fields are never returned to the client.
+   */
+  private toResponse(attendance: Attendance): AttendanceResponse {
+    const { user, ...employee } = attendance.employee;
+    return {
+      ...attendance,
+      employee: {
+        ...employee,
+        profilePicture: user?.profilePicture ?? null,
+      },
+    };
   }
 
   private async getEmployeeForUser(userId: string) {

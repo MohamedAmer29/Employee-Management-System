@@ -264,9 +264,14 @@ describe('LeaveService', () => {
       const result = await service.findAll(Role.admin, 'user-1');
 
       expect(leaveRepository.find).toHaveBeenCalledWith({
-        relations: ['employee'],
+        relations: ['employee', 'employee.user'],
       });
-      expect(result).toEqual([leave]);
+      expect(result).toEqual([
+        {
+          ...leave,
+          employee: { id: 'emp-1', fullName: 'Jane Doe', profilePicture: null },
+        },
+      ]);
     });
 
     it('should return own leave requests for employees', async () => {
@@ -277,9 +282,34 @@ describe('LeaveService', () => {
 
       expect(leaveRepository.find).toHaveBeenCalledWith({
         where: { employee: { id: 'emp-1' } },
-        relations: ['employee'],
+        relations: ['employee', 'employee.user'],
       });
-      expect(result).toEqual([leave]);
+      expect(result).toEqual([
+        {
+          ...leave,
+          employee: { id: 'emp-1', fullName: 'Jane Doe', profilePicture: null },
+        },
+      ]);
+    });
+
+    it('should lift the profile picture onto the employee object', async () => {
+      const leaveWithUser = {
+        ...leave,
+        employee: {
+          ...employee,
+          user: { profilePicture: 'https://img.example/pic.jpg' },
+        },
+      } as unknown as LeaveRequest;
+      leaveRepository.find.mockResolvedValue([leaveWithUser]);
+
+      const result = await service.findAll(Role.admin, 'user-1');
+
+      expect(result[0].employee).toEqual({
+        id: 'emp-1',
+        fullName: 'Jane Doe',
+        profilePicture: 'https://img.example/pic.jpg',
+      });
+      expect((result[0].employee as any).user).toBeUndefined();
     });
   });
 
@@ -300,9 +330,14 @@ describe('LeaveService', () => {
 
       expect(leaveRepository.find).toHaveBeenCalledWith({
         where: { employee: { id: 'emp-1' } },
-        relations: ['employee'],
+        relations: ['employee', 'employee.user'],
       });
-      expect(result).toEqual([leave]);
+      expect(result).toEqual([
+        {
+          ...leave,
+          employee: { id: 'emp-1', fullName: 'Jane Doe', profilePicture: null },
+        },
+      ]);
     });
   });
 });

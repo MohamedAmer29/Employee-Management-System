@@ -184,28 +184,73 @@ describe('AttendanceService', () => {
 
   describe('findAll / findByEmployee', () => {
     it('should return all attendance records', async () => {
-      attendanceRepository.find.mockResolvedValue([{ id: 'att-1' }]);
+      attendanceRepository.find.mockResolvedValue([{ id: 'att-1', employee }]);
 
       const result = await service.findAll();
 
       expect(attendanceRepository.find).toHaveBeenCalledWith({
-        relations: ['employee'],
+        where: {},
+        relations: ['employee', 'employee.user'],
       });
-      expect(result).toEqual([{ id: 'att-1' }]);
+      expect(result).toEqual([
+        {
+          id: 'att-1',
+          employee: {
+            id: 'emp-1',
+            fullName: 'Jane Doe',
+            profilePicture: null,
+          },
+        },
+      ]);
     });
 
     it('should return attendance records for an employee', async () => {
       employeesService.findOne.mockResolvedValue(employee);
-      attendanceRepository.find.mockResolvedValue([{ id: 'att-1' }]);
+      attendanceRepository.find.mockResolvedValue([{ id: 'att-1', employee }]);
 
       const result = await service.findByEmployee('emp-1');
 
       expect(employeesService.findOne).toHaveBeenCalledWith('emp-1');
       expect(attendanceRepository.find).toHaveBeenCalledWith({
         where: { employee: { id: 'emp-1' } },
-        relations: ['employee'],
+        relations: ['employee', 'employee.user'],
       });
-      expect(result).toEqual([{ id: 'att-1' }]);
+      expect(result).toEqual([
+        {
+          id: 'att-1',
+          employee: {
+            id: 'emp-1',
+            fullName: 'Jane Doe',
+            profilePicture: null,
+          },
+        },
+      ]);
+    });
+
+    it('should lift the employee profile picture and strip the user relation', async () => {
+      attendanceRepository.find.mockResolvedValue([
+        {
+          id: 'att-1',
+          employee: {
+            id: 'emp-1',
+            fullName: 'Jane Doe',
+            user: {
+              id: 'u-1',
+              password: 'secret',
+              profilePicture: 'https://img.example/pic.jpg',
+            },
+          },
+        },
+      ]);
+
+      const result = await service.findAll();
+
+      expect(result[0].employee).toEqual({
+        id: 'emp-1',
+        fullName: 'Jane Doe',
+        profilePicture: 'https://img.example/pic.jpg',
+      });
+      expect(result[0].employee).not.toHaveProperty('user');
     });
 
     it('should propagate NotFoundException when employee not found', async () => {
