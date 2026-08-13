@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '@/users/entities/user.entity';
+import { Employee } from '@/employees/entities/employee.entity';
 import { CacheInvalidationService } from '@/redis/cache-invalidation.service';
 import { LeaveCreatedEvent } from '@/common/events/leave-created.event';
 import { LeaveApprovedEvent } from '@/common/events/leave-approved.event';
@@ -22,6 +23,8 @@ export class DashboardCacheListener {
     private readonly cacheInvalidation: CacheInvalidationService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Employee)
+    private readonly employeeRepository: Repository<Employee>,
   ) {}
 
   @OnEvent('attendance.recorded')
@@ -55,13 +58,34 @@ export class DashboardCacheListener {
   }
 
   /**
-   * Fired when a user account is created, activated, deactivated or deleted.
-   * The admin dashboard now counts users as employees, so any user mutation
-   * must drop the cached admin dashboard.
+   * Fired when a user account is created, activated, deactivated, deleted or
+   * has its email verified. The admin dashboard counts users as employees, so
+   * any user mutation must drop the cached admin dashboard. When a user id is
+   * provided, the linked employee's cached profile is also dropped so fields
+   * like `isEmailVerified` / `emailVerifiedAt` are not served stale.
    */
   @OnEvent('user.changed')
-  async handleUserChanged() {
+  async handleUserChanged(payload?: { userId?: string | number }) {
     await this.cacheInvalidation.invalidateAdminDashboard();
+
+    if (payload?.userId == null) {
+      return;
+    }
+
+    const employee = await this.employeeRepository
+      .createQueryBuilder('employee')
+      .innerJoin('employee.user', 'user')
+      .where('user.id = :userId', { userId: Number(payload.userId) })
+      .getOne();
+
+    if (!employee) {
+      return;
+    }
+
+    await this.cacheInvalidation.invalidateEmployee(String(employee.id));
+    await this.cacheInvalidation.invalidateEmployeeDashboard(
+      String(payload.userId),
+    );
   }
 
   @OnEvent('notification.created')

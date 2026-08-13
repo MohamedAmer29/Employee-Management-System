@@ -109,7 +109,7 @@ export class EmployeesService {
       email: dto.email,
       phone: dto.phone,
       position: dto.position,
-      isActive: dto.isActive ?? true,
+      isActive: user ? user.isActive : (dto.isActive ?? true),
       role: dto.role ?? 'Employee',
       user,
     });
@@ -253,9 +253,6 @@ export class EmployeesService {
     const previousDepartmentId = employee.department?.id;
 
     const oldValues: Record<string, unknown> = {};
-    if (dto.fullName) oldValues.fullName = employee.fullName;
-    if (dto.email) oldValues.email = employee.email;
-    if (dto.phone) oldValues.phone = employee.phone;
     if (dto.position) oldValues.position = employee.position;
 
     Object.assign(employee, dto);

@@ -5,6 +5,8 @@ import { LeaveRequest } from '@/leave/entities/leave.entity';
 import { PerformanceReview } from '@/performance/entities/performance';
 import { User } from '@/users/entities/user.entity';
 import {
+  BeforeInsert,
+  BeforeUpdate,
   Column,
   CreateDateColumn,
   Entity,
@@ -61,4 +63,35 @@ export class Employee {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  /**
+   * Keep the contact/identity columns in sync with the linked User account so
+   * the employee profile never drifts from the credentials used to sign in.
+   * These values are intentionally derived from `user` and not authored
+   * independently. The guard skips when no linked user is present (standalone
+   * employees) or when the relation is only partially loaded.
+   */
+  @BeforeInsert()
+  @BeforeUpdate()
+  syncFromUser?(): void {
+    if (!this.user) {
+      return;
+    }
+
+    if (this.user.username !== undefined) {
+      this.email = this.user.username;
+    }
+    if (this.user.phoneNumber !== undefined) {
+      this.phone = this.user.phoneNumber;
+    }
+    if (this.user.role !== undefined) {
+      this.role = this.user.role;
+    }
+    if (this.user.isActive !== undefined) {
+      this.isActive = this.user.isActive;
+    }
+    if (this.user.firstName !== undefined && this.user.lastName !== undefined) {
+      this.fullName = `${this.user.firstName} ${this.user.lastName}`;
+    }
+  }
 }

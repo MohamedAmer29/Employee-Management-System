@@ -119,8 +119,12 @@ describe('DashboardService', () => {
           provide: RedisService,
           useValue: {
             rememberWithLock: jest.fn(
-              <T>(_key: string, _lockKey: string, _ttl: number, loader: () => Promise<T>) =>
-                loader(),
+              <T>(
+                _key: string,
+                _lockKey: string,
+                _ttl: number,
+                loader: () => Promise<T>,
+              ) => loader(),
             ),
             remember: jest.fn(
               <T>(_key: string, _ttl: number, loader: () => Promise<T>) =>

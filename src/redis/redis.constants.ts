@@ -8,6 +8,7 @@ export const CACHE_TTL = {
   DEPARTMENTS_LIST: 300,
   DASHBOARD: 60,
   DASHBOARD_TREND: 60,
+  ADMIN_USERS: 120,
   NOTIFICATIONS_UNREAD: 300,
   RATE_LIMIT: 900,
   LOGIN_ATTEMPTS: 900,
@@ -33,13 +34,22 @@ export const RedisKeys = {
   departmentsList: (): string => 'departments:list',
   departmentPattern: (): string => 'department:*',
 
-  dashboardAdmin: (): string => 'dashboard:admin',
+  dashboardAdmin: (userId: string): string => `dashboard:admin:${userId}`,
   dashboardAdminTrend: (period: string): string => `dashboard:admin:${period}`,
   dashboardManager: (userId: string): string => `dashboard:manager:${userId}`,
   dashboardEmployee: (userId: string): string => `dashboard:employee:${userId}`,
   dashboardManagerPattern: (): string => 'dashboard:manager:*',
   dashboardEmployeePattern: (): string => 'dashboard:employee:*',
   dashboardLock: (scope: string): string => `dashboard:lock:${scope}`,
+
+  adminManagers: (hash: string): string => `admin:managers:${hash}`,
+  adminManager: (id: string): string => `admin:manager:${id}`,
+  adminAdmins: (hash: string): string => `admin:admins:${hash}`,
+  adminAdmin: (id: string): string => `admin:admin:${id}`,
+  adminManagersPattern: (): string => 'admin:managers:*',
+  adminManagerPattern: (): string => 'admin:manager:*',
+  adminAdminsPattern: (): string => 'admin:admins:*',
+  adminAdminPattern: (): string => 'admin:admin:*',
 
   notificationsUnread: (userId: string): string =>
     `notifications:unread:${userId}`,

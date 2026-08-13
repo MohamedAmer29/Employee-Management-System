@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { User } from '../users/entities/user.entity';
 import { OtpService, OtpVerificationResult } from '../otp/otp.service';
 import { MailService } from '../mail/mail.service';
@@ -45,6 +46,7 @@ export class EmailVerificationService {
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -133,6 +135,10 @@ export class EmailVerificationService {
     // future flow (e.g. an email change) is not blocked by this one.
     await this.otpService.clearOtp(normalized);
     await this.otpService.clearResendAllowance(normalized);
+
+    // Drop cached profiles that embed this user so the verified flag and date
+    // are not served stale (admin dashboard, linked employee, employee dashboard).
+    this.eventEmitter.emit('user.changed', { userId: user.id });
 
     this.logger.log(`Email verified for user ${user.id}`);
 

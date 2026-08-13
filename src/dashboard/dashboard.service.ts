@@ -71,17 +71,20 @@ export class DashboardService {
    * queries). It is cached for CACHE_TTL.DASHBOARD seconds behind a Redis lock
    * so a cache expiry never causes a stampede of concurrent PostgreSQL scans.
    */
-  async getAdminDashboard(): Promise<AdminDashboardData> {
+  async getAdminDashboard(userId?: string): Promise<AdminDashboardData> {
+    const scope = userId ?? 'all';
     return this.redisService.rememberWithLock<AdminDashboardData>(
-      RedisKeys.dashboardAdmin(),
-      RedisKeys.dashboardLock('admin'),
+      RedisKeys.dashboardAdmin(scope),
+      RedisKeys.dashboardLock(`admin:${scope}`),
       CACHE_TTL.DASHBOARD,
-      () => this.buildAdminDashboard(),
+      () => this.buildAdminDashboard(userId),
       CACHE_TTL.LOCK,
     );
   }
 
-  private async buildAdminDashboard(): Promise<AdminDashboardData> {
+  private async buildAdminDashboard(
+    userId?: string,
+  ): Promise<AdminDashboardData> {
     const [
       employeeStats,
       departmentStats,
@@ -96,7 +99,7 @@ export class DashboardService {
       this.getAttendanceStats(),
       this.getLeaveStats(),
       this.getPerformanceStats(),
-      this.getNotificationStats(),
+      this.getNotificationStats(userId),
       this.getRecentActivities(),
     ]);
 
@@ -447,10 +450,15 @@ export class DashboardService {
     };
   }
 
-  private async getNotificationStats(): Promise<NotificationStats> {
+  private async getNotificationStats(
+    userId?: string,
+  ): Promise<NotificationStats> {
+    const base = userId ? { userId } : {};
     const [total, unread] = await Promise.all([
-      this.notificationRepository.count(),
-      this.notificationRepository.count({ where: { isRead: false } }),
+      this.notificationRepository.count({ where: base }),
+      this.notificationRepository.count({
+        where: { ...base, isRead: false },
+      }),
     ]);
 
     return { total, unread };

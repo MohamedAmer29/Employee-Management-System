@@ -1,10 +1,5 @@
 import { Type, Transform } from 'class-transformer';
-import {
-  IsEnum,
-  IsNumberString,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsEnum, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { DashboardPeriod } from '../enums/dashboard-period.enum';
 import { toIdString } from '../../common/transforms/id-string.transform';
 

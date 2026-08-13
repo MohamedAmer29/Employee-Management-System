@@ -185,6 +185,22 @@ export class AuthService {
     // Credentials were correct, so this is not a brute-force attempt.
     await this.loginProtection.clearFailures(ip, username);
 
+    // Block authentication for deactivated accounts. This guard runs before any
+    // token is issued so a deactivated user cannot obtain a fresh session, even
+    // though JwtStrategy also rejects their tokens on subsequent requests.
+    if (user.isActive === false) {
+      this.eventEmitter.emit('audit.log.created', {
+        userId: user.id,
+        action: AuditAction.LOGIN_FAILED,
+        entity: 'User',
+        entityId: String(user.id),
+        description: 'Login blocked: account deactivated',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
     // Email verification gate. Checked after the password so an attacker
     // cannot use this endpoint to discover which accounts are unverified.
     // No token is issued and no session is created when this throws.

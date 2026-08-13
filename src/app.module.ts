@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { getDatabaseConfig } from './config/database.config';
 import { UsersModule } from './users/users.module';
 import { ManagersModule } from './managers/managers.module';
+import { AdminModule } from './admin/admin.module';
 import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { DepartmentModule } from './department/department.module';
@@ -39,6 +40,7 @@ import { validateEnv } from './config/env.validation';
     }),
     UsersModule,
     ManagersModule,
+    AdminModule,
     EmployeesModule,
     DepartmentModule,
     AttendanceModule,

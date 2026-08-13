@@ -512,9 +512,9 @@ describe('EmployeesService', () => {
         user: undefined,
       } as unknown as Employee);
 
-      await expect(
-        service.uploadProfilePicture('emp-1', file),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadProfilePicture('emp-1', file)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should allow profile picture upload for non-Employee roles', async () => {

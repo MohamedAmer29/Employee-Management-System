@@ -37,8 +37,8 @@ export class DashboardController {
     status: 403,
     description: 'Forbidden - Admin access required',
   })
-  getAdminDashboard() {
-    return this.dashboardService.getAdminDashboard();
+  getAdminDashboard(@CurrentUser('userId') userId: string) {
+    return this.dashboardService.getAdminDashboard(userId);
   }
 
   @Get('admin/attendance')

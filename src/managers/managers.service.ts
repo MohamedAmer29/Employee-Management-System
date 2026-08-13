@@ -293,6 +293,10 @@ export class ManagersService {
     }
     if (dto.isActive !== undefined) {
       oldValues.isActive = employee.isActive;
+      if (employee.user) {
+        employee.user.isActive = dto.isActive;
+        await this.userRepository.save(employee.user);
+      }
       employee.isActive = dto.isActive;
     }
 
@@ -329,6 +333,10 @@ export class ManagersService {
     this.assertManages(employee, departmentId);
 
     const previous = employee.isActive;
+    if (employee.user) {
+      employee.user.isActive = dto.isActive;
+      await this.userRepository.save(employee.user);
+    }
     employee.isActive = dto.isActive;
     const updated = await this.employeeRepository.save(employee);
 
@@ -362,6 +370,10 @@ export class ManagersService {
     this.assertManages(employee, departmentId);
 
     const previous = employee.isActive;
+    if (employee.user) {
+      employee.user.isActive = false;
+      await this.userRepository.save(employee.user);
+    }
     employee.isActive = false;
     const updated = await this.employeeRepository.save(employee);
 

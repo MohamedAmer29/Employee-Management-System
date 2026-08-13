@@ -39,8 +39,21 @@ export class CacheInvalidationService {
   }
 
   async invalidateAdminDashboard(): Promise<void> {
-    await this.redisService.delete(RedisKeys.dashboardAdmin());
     await this.redisService.deleteByPattern('dashboard:admin:*');
+  }
+
+  /**
+   * Drops the cached admin user listings / details (managers and admins). Called
+   * after any admin mutation so the cached GET /admin/* responses stay fresh.
+   * Keyed by query hash and entity id, so a pattern delete is required.
+   */
+  async invalidateAdminUsers(): Promise<void> {
+    await Promise.all([
+      this.redisService.deleteByPattern(RedisKeys.adminManagersPattern()),
+      this.redisService.deleteByPattern(RedisKeys.adminManagerPattern()),
+      this.redisService.deleteByPattern(RedisKeys.adminAdminsPattern()),
+      this.redisService.deleteByPattern(RedisKeys.adminAdminPattern()),
+    ]);
   }
 
   async invalidateManagerDashboard(userId: string): Promise<void> {
