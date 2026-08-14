@@ -14,6 +14,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { breakEmployeeUserCycle } from '../common/utils/break-employee-user-cycle';
 
 type UploadedProfilePictureFile = {
   originalname: string;
@@ -72,6 +73,7 @@ export class UsersService {
   private sanitizeUser(user: User): User {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safeUser } = user;
+    breakEmployeeUserCycle(safeUser.employee);
     return safeUser as User;
   }
 

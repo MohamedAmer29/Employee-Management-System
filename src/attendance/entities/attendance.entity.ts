@@ -1,13 +1,16 @@
 import { Employee } from '@/employees/entities/employee.entity';
+import { AttendanceStatus } from '@/common/constants/enums';
 import {
   Column,
   Entity,
   Index,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 
 @Entity('attendance')
+@Unique(['employee', 'date'])
 export class Attendance {
   @PrimaryGeneratedColumn()
   id!: string;
@@ -28,4 +31,11 @@ export class Attendance {
 
   @Column({ default: false })
   isPresent!: boolean;
+
+  @Column({
+    type: 'enum',
+    enum: AttendanceStatus,
+    nullable: true,
+  })
+  status?: AttendanceStatus;
 }

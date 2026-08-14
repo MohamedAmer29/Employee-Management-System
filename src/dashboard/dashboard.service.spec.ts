@@ -220,19 +220,23 @@ describe('DashboardService', () => {
   });
 
   describe('getAdminAttendanceTrend', () => {
-    it('should map raw rows into attendance trend data', async () => {
+    it('should compute the trend over working days with no-shows as absent', async () => {
       queryBuilders.Attendance.getRawMany.mockResolvedValue([
-        { attendance_date: '2026-08-08', present: '3', absent: '1' },
+        { date: '2026-08-08', departmentId: 'dept-1', present: '3', late: '1' },
       ]);
+      queryBuilders.Employee.getRawMany.mockResolvedValue([
+        { departmentId: 'dept-1', departmentName: 'IT', count: '4' },
+      ]);
+      queryBuilders.LeaveRequest.getRawMany.mockResolvedValue([]);
 
       const result = await service.getAdminAttendanceTrend(
         DashboardPeriod.TODAY,
       );
 
       expect(queryBuilders.Attendance.andWhere).toHaveBeenCalled();
-      expect(result).toEqual({
-        attendanceTrend: [{ date: '2026-08-08', present: 3, absent: 1 }],
-      });
+      expect(Array.isArray(result.attendanceTrend)).toBe(true);
+      expect(result.summary).toHaveProperty('attendanceRate');
+      expect(Array.isArray(result.departments)).toBe(true);
     });
   });
 

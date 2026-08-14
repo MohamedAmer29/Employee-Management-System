@@ -16,6 +16,7 @@ import { Role } from '@/auth/interfaces/Role.enum';
 import { AuditAction } from '@/audit-logs/enums/audit-action.enum';
 import { SessionService } from '@/auth/session.service';
 import { CacheInvalidationService } from '@/redis/cache-invalidation.service';
+import { breakEmployeeUserCycle } from '@/common/utils/break-employee-user-cycle';
 import { RedisService } from '@/redis/redis.service';
 import { RedisKeys, CACHE_TTL } from '@/redis/redis.constants';
 import { NotificationsService } from '@/notifications/notifications.service';
@@ -780,7 +781,7 @@ export class AdminService {
     }
 
     const [items, total] = await qb
-      .orderBy('user.createdAt', 'DESC')
+      .orderBy('employee.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -817,6 +818,7 @@ export class AdminService {
   private sanitize(user: User): SafeUser {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safe } = user;
+    breakEmployeeUserCycle(safe.employee);
     return safe as SafeUser;
   }
 }

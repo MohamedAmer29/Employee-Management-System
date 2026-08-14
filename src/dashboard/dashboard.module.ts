@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { AdminAttendanceController } from './admin-attendance.controller';
+import { AdminAttendanceService } from './admin-attendance.service';
 import { Employee } from '@/employees/entities/employee.entity';
 import { Attendance } from '@/attendance/entities/attendance.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
@@ -25,8 +27,8 @@ import { DashboardCacheListener } from './dashboard-cache.listener';
       User,
     ]),
   ],
-  controllers: [DashboardController],
-  providers: [DashboardService, DashboardCacheListener],
+  controllers: [DashboardController, AdminAttendanceController],
+  providers: [DashboardService, AdminAttendanceService, DashboardCacheListener],
   exports: [DashboardService],
 })
 export class DashboardModule {}

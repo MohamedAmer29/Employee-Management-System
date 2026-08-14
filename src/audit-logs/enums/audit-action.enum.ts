@@ -24,4 +24,10 @@ export enum AuditAction {
   ACTIVATE_ADMIN = 'ACTIVATE_ADMIN',
   DEACTIVATE_ADMIN = 'DEACTIVATE_ADMIN',
   FORCE_LOGOUT_USER = 'FORCE_LOGOUT_USER',
+
+  // Background attendance automation
+  AUTO_MARK_ABSENT = 'AUTO_MARK_ABSENT',
+
+  // Admin attendance reporting
+  VIEW_MONTHLY_ATTENDANCE = 'VIEW_MONTHLY_ATTENDANCE',
 }

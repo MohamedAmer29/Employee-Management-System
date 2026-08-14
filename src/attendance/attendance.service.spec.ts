@@ -8,8 +8,10 @@ import {
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { Attendance } from './entities/attendance.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { UsersService } from '../users/users.service';
 import { EmployeesService } from '../employees/employees.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('AttendanceService', () => {
   let service: AttendanceService;
@@ -21,6 +23,8 @@ describe('AttendanceService', () => {
   };
   let usersService: { findOne: jest.Mock };
   let employeesService: { findOne: jest.Mock };
+  let employeeRepository: { find: jest.Mock };
+  let configService: { get: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
 
   const employee = { id: 'emp-1', fullName: 'Jane Doe' };
@@ -35,6 +39,8 @@ describe('AttendanceService', () => {
     };
     usersService = { findOne: jest.fn() };
     employeesService = { findOne: jest.fn() };
+    employeeRepository = { find: jest.fn() };
+    configService = { get: jest.fn() };
     eventEmitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -44,8 +50,13 @@ describe('AttendanceService', () => {
           provide: getRepositoryToken(Attendance),
           useValue: attendanceRepository,
         },
+        {
+          provide: getRepositoryToken(Employee),
+          useValue: employeeRepository,
+        },
         { provide: UsersService, useValue: usersService },
         { provide: EmployeesService, useValue: employeesService },
+        { provide: ConfigService, useValue: configService },
         { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();

@@ -24,6 +24,7 @@ import { LoginProtectionService } from './login-protection.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailNotVerifiedException } from '../common/exceptions/email-verification.exception';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
+import { breakEmployeeUserCycle } from '../common/utils/break-employee-user-cycle';
 
 @Injectable()
 export class AuthService {
@@ -354,6 +355,7 @@ export class AuthService {
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...result } = user as any;
+      breakEmployeeUserCycle(result.employee as { user?: unknown });
       return result;
     } catch (error: any) {
       throw new UnauthorizedException(error?.message ?? 'Invalid access token');

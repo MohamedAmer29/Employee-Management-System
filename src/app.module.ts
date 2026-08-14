@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { getDatabaseConfig } from './config/database.config';
@@ -31,6 +32,7 @@ import { validateEnv } from './config/env.validation';
     OtpModule,
     AuthModule,
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

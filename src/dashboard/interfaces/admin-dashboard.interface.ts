@@ -28,6 +28,34 @@ export interface AttendanceTrend {
   date: string;
   present: number;
   absent: number;
+  late: number;
+  onLeave: number;
+  attendanceRate: number;
+}
+
+export interface AttendanceTrendDepartment {
+  departmentId: string | null;
+  departmentName: string | null;
+  present: number;
+  absent: number;
+  late: number;
+  onLeave: number;
+  attendanceRate: number;
+}
+
+export interface AttendanceTrendSummary {
+  totalPresent: number;
+  totalAbsent: number;
+  totalLate: number;
+  totalLeave: number;
+  attendanceRate: number;
+  daysIncluded: number;
+}
+
+export interface AttendanceTrendResponse {
+  attendanceTrend: AttendanceTrend[];
+  summary: AttendanceTrendSummary;
+  departments: AttendanceTrendDepartment[];
 }
 
 export interface LeaveStats {

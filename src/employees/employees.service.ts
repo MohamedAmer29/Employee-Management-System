@@ -33,6 +33,7 @@ import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { EmployeeUpdatedEvent } from '../common/events/employee-updated.event';
 import { RedisService } from '../redis/redis.service';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
+import { breakEmployeeUserCycle } from '../common/utils/break-employee-user-cycle';
 import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
@@ -240,9 +241,12 @@ export class EmployeesService {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safeUser } = employee.user;
+    breakEmployeeUserCycle(safeUser.employee);
+    const employeeRest = { ...employee };
+    breakEmployeeUserCycle(employeeRest);
 
     return {
-      ...employee,
+      ...employeeRest,
       profilePicture,
       user: safeUser as User,
     };

@@ -22,6 +22,7 @@ import { EmployeesService } from '@/employees/employees.service';
 import { PerformanceService } from '@/performance/performance.service';
 import { NotificationsService } from '@/notifications/notifications.service';
 import { CacheInvalidationService } from '@/redis/cache-invalidation.service';
+import { breakEmployeeUserCycle } from '@/common/utils/break-employee-user-cycle';
 import { LeaveApprovedEvent } from '@/common/events/leave-approved.event';
 import { LeaveRejectedEvent } from '@/common/events/leave-rejected.event';
 import { ERROR_MESSAGES } from '@/common/constants/error-messages';
@@ -697,9 +698,12 @@ export class ManagersService {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safeUser } = employee.user;
+    breakEmployeeUserCycle(safeUser.employee);
+    const employeeRest = { ...employee };
+    breakEmployeeUserCycle(employeeRest);
 
     return {
-      ...employee,
+      ...employeeRest,
       profilePicture,
       user: safeUser,
     } as ManagerEmployeeResponse;
