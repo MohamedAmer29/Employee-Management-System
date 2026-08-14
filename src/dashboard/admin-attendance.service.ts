@@ -281,7 +281,7 @@ export class AdminAttendanceService {
   ): Promise<Set<string>> {
     const rows = await this.leaveRepository
       .createQueryBuilder('leave')
-      .select('leave.employeeId', 'employeeId')
+      .select('leave."employeeId"', 'employeeId')
       .where('leave.status = :status', { status: LeaveStatus.APPROVED })
       .andWhere('leave.startDate <= :date', { date })
       .andWhere('leave.endDate >= :date', { date })
@@ -344,7 +344,7 @@ export class AdminAttendanceService {
     if (employeeIds.length > 0) {
       const rows = await this.attendanceRepository
         .createQueryBuilder('att')
-        .select('att.employeeId', 'employeeId')
+        .select('att."employeeId"', 'employeeId')
         .addSelect("TO_CHAR(att.date, 'YYYY-MM-DD')", 'date')
         .addSelect('att.checkIn', 'checkIn')
         .addSelect('att.checkOut', 'checkOut')
@@ -373,7 +373,7 @@ export class AdminAttendanceService {
     const leaveByEmployee = new Map<string, Map<string, string | null>>();
     const leaveRows = await this.leaveRepository
       .createQueryBuilder('leave')
-        .select('leave.employeeId', 'employeeId')
+        .select('leave."employeeId"', 'employeeId')
         .addSelect("TO_CHAR(leave.startDate, 'YYYY-MM-DD')", 'startDate')
         .addSelect("TO_CHAR(leave.endDate, 'YYYY-MM-DD')", 'endDate')
         .addSelect('leave.reason', 'reason')
@@ -872,7 +872,7 @@ export class AdminAttendanceService {
     if (employeeIds.length > 0) {
       const rows = await this.attendanceRepository
         .createQueryBuilder('att')
-        .select('att.employeeId', 'employeeId')
+        .select('att."employeeId"', 'employeeId')
         .addSelect("TO_CHAR(att.date, 'YYYY-MM-DD')", 'date')
         .addSelect('att.checkIn', 'checkIn')
         .addSelect('att.checkOut', 'checkOut')
@@ -898,7 +898,7 @@ export class AdminAttendanceService {
     if (employeeIds.length > 0) {
       const leaveRows = await this.leaveRepository
         .createQueryBuilder('leave')
-        .select('leave.employeeId', 'employeeId')
+        .select('leave."employeeId"', 'employeeId')
         .addSelect("TO_CHAR(leave.startDate, 'YYYY-MM-DD')", 'startDate')
         .addSelect("TO_CHAR(leave.endDate, 'YYYY-MM-DD')", 'endDate')
         .where('leave.status = :status', { status: LeaveStatus.APPROVED })

@@ -413,7 +413,7 @@ export class ManagersService {
       .where('employee.departmentId = :departmentId', { departmentId });
 
     if (employeeId) {
-      queryBuilder.andWhere('attendance.employeeId = :employeeId', {
+      queryBuilder.andWhere('attendance."employeeId" = :employeeId', {
         employeeId,
       });
     }

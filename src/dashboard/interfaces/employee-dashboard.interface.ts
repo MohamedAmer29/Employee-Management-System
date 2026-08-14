@@ -1,3 +1,9 @@
+import {
+  AttendanceTrend,
+  PerformanceDistribution,
+  RecentActivity,
+} from './admin-dashboard.interface';
+
 export interface EmployeeInfo {
   name: string;
   position: string;
@@ -14,6 +20,9 @@ export interface TodayAttendance {
 export interface EmployeeAttendanceStats {
   today: TodayAttendance;
   monthlyRate: number;
+  presentToday: number;
+  absentToday: number;
+  attendanceRate: number;
 }
 
 export interface EmployeeLeaveStats {
@@ -25,6 +34,8 @@ export interface EmployeeLeaveStats {
 export interface EmployeePerformanceStats {
   averageRating: number;
   totalReviews: number;
+  reviewsThisMonth: number;
+  performanceDistribution: PerformanceDistribution[];
   latestReview: {
     rating: number;
     feedback: string;
@@ -40,7 +51,9 @@ export interface EmployeeNotificationStats {
 export interface EmployeeDashboardData {
   employee: EmployeeInfo;
   attendance: EmployeeAttendanceStats;
+  attendanceTrend: AttendanceTrend[];
   leave: EmployeeLeaveStats;
   performance: EmployeePerformanceStats;
   notifications: EmployeeNotificationStats;
+  recentActivities: RecentActivity[];
 }

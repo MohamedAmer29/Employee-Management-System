@@ -234,7 +234,7 @@ export class LeaveService {
 
     const overlapping = await this.leaveRepository
       .createQueryBuilder('leave')
-      .where('leave.employeeId = :employeeId', { employeeId })
+      .where('leave."employeeId" = :employeeId', { employeeId })
       .andWhere('leave.startDate <= :endDate', { endDate })
       .andWhere('leave.endDate >= :startDate', { startDate })
       .getOne();

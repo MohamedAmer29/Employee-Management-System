@@ -427,7 +427,7 @@ export class AttendanceService {
 
       const attendedRows = await manager
         .createQueryBuilder(Attendance, 'att')
-        .select('att.employeeId', 'employeeId')
+        .select('att."employeeId"', 'employeeId')
         .where('att.date = :date', { date })
         .andWhere('att.employeeId IN (:...ids)', { ids: activeIds })
         .getRawMany<{ employeeId: string }>();
@@ -441,7 +441,7 @@ export class AttendanceService {
       // instead of ABSENT.
       const onLeaveRows = await manager
         .createQueryBuilder(LeaveRequest, 'leave')
-        .select('leave.employeeId', 'employeeId')
+        .select('leave."employeeId"', 'employeeId')
         .where('leave.status = :status', { status: LeaveStatus.APPROVED })
         .andWhere('leave.startDate <= :date', { date })
         .andWhere('leave.endDate >= :date', { date })
@@ -456,14 +456,14 @@ export class AttendanceService {
         // re-run (or a concurrent instance that slipped past the lock) can
         // never create duplicates.
         const placeholders = missingIds
-          .map((_, index) => `($${index * 3 + 1}, $${index * 3 + 2}, $${index * 3 + 3})`)
+          .map((_, index) => `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`)
           .join(', ');
         const parameters: unknown[] = [];
         missingIds.forEach((id) => {
           const status = onLeaveIds.has(id)
             ? AttendanceStatus.ON_LEAVE
             : AttendanceStatus.ABSENT;
-          parameters.push(id, date, status);
+          parameters.push(id, date, false, status);
         });
 
         await manager.query(
