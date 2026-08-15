@@ -15,6 +15,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { PerformanceReviewCreatedEvent } from '../common/events/performance-review-created.event';
 import { CacheInvalidationService } from '@/redis/cache-invalidation.service';
+import { getBusinessDate } from '@/common/utils/timezones.util';
 
 @Injectable()
 export class PerformanceService {
@@ -51,7 +52,7 @@ export class PerformanceService {
       throw new NotFoundException('Employee not found');
     }
 
-    const reviewDate = dto.reviewDate ?? new Date().toISOString().split('T')[0];
+    const reviewDate = dto.reviewDate ?? getBusinessDate();
     const review = this.performanceRepository.create({
       employee,
       reviewer: author.id,

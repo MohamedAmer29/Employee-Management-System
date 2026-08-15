@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Between, Repository, FindOptionsWhere } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
@@ -17,6 +17,11 @@ import { UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { AttendanceRecordedEvent } from '../common/events/attendance-recorded.event';
+import {
+  getBusinessDate,
+  getBusinessMonthStart,
+  getWorkingDaysInRange,
+} from '@/common/utils/timezones.util';
 
 type AttendanceEmployeeResponse = Omit<Employee, 'user'> & {
   profilePicture: string | null;
@@ -208,11 +213,27 @@ export class AttendanceService {
     userId: string,
   ): Promise<EmployeeAttendanceSummary> {
     const employee = await this.getEmployeeForUser(userId);
+    const today = getBusinessDate(this.configService);
+    const monthStart = getBusinessMonthStart(this.configService);
+
+    // Working days (Fri+Sat excluded) from the start of the business month up
+    // to today — this is the correct denominator for the attendance rate,
+    // not the raw number of attendance rows.
+    const totalWorkingDays = getWorkingDaysInRange(
+      monthStart,
+      today,
+      this.configService,
+    ).length;
+
+    // Count only records within the same month-to-date window so the rate
+    // reflects how many of the elapsed working days the employee attended.
     const records = await this.attendanceRepository.find({
-      where: { employee: { id: employee.id } },
+      where: {
+        employee: { id: employee.id },
+        date: Between(monthStart, today),
+      },
     });
 
-    const total = records.length;
     let present = 0;
     let absent = 0;
     let late = 0;
@@ -236,12 +257,15 @@ export class AttendanceService {
       }
     }
 
-    const attendanceRate = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 0;
+    const attendanceRate =
+      totalWorkingDays > 0
+        ? Number(((present / totalWorkingDays) * 100).toFixed(1))
+        : 0;
 
     return {
       employeeId: employee.id,
       employeeName: employee.fullName,
-      totalWorkingDays: total,
+      totalWorkingDays,
       present,
       absent,
       leave,

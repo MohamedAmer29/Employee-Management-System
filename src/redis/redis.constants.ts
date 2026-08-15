@@ -34,11 +34,11 @@ export const RedisKeys = {
   departmentsList: (): string => 'departments:list',
   departmentPattern: (): string => 'department:*',
 
-  dashboardAdmin: (userId: string): string => `dashboard:admin:${userId}`,
-  dashboardAdminTrend: (period: string): string => `dashboard:admin:${period}:v8`,
+  dashboardAdmin: (userId: string): string => `dashboard:admin:${userId}:v3`,
+  dashboardAdminTrend: (period: string): string => `dashboard:admin:${period}:v9`,
   dashboardManager: (userId: string): string => `dashboard:manager:${userId}`,
   dashboardEmployee: (userId: string): string =>
-    `dashboard:employee:${userId}:v3`,
+    `dashboard:employee:${userId}:v5`,
   dashboardManagerPattern: (): string => 'dashboard:manager:*',
   dashboardEmployeePattern: (): string => 'dashboard:employee:*',
   dashboardLock: (scope: string): string => `dashboard:lock:${scope}`,

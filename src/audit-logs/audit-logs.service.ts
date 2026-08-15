@@ -1,15 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { AuditLog } from './audit-log.entity';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { AuditLogFilterDto } from './dto/audit-log-filter.dto';
+import { getDateUtcRange } from '@/common/utils/timezones.util';
 
 @Injectable()
 export class AuditLogsService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(dto: CreateAuditLogDto) {
@@ -19,7 +22,10 @@ export class AuditLogsService {
     return {
       success: true,
       message: 'Audit log created successfully',
-      data: saved,
+      data: {
+        ...saved,
+        createdAt: saved.createdAt,
+      },
     };
   }
 
@@ -48,22 +54,29 @@ export class AuditLogsService {
       .where(where);
 
     if (filterDto.dateFrom) {
+      const { start } = getDateUtcRange(filterDto.dateFrom);
       queryBuilder.andWhere('auditLog.createdAt >= :dateFrom', {
-        dateFrom: filterDto.dateFrom,
+        dateFrom: start,
       });
     }
 
     if (filterDto.dateTo) {
-      queryBuilder.andWhere('auditLog.createdAt <= :dateTo', {
-        dateTo: filterDto.dateTo,
+      const { end } = getDateUtcRange(filterDto.dateTo);
+      queryBuilder.andWhere('auditLog.createdAt < :dateTo', {
+        dateTo: end,
       });
     }
 
-    const [data, total] = await queryBuilder
+    const [rows, total] = await queryBuilder
       .orderBy('auditLog.createdAt', 'DESC')
       .skip(skip)
       .take(limit)
       .getManyAndCount();
+
+    const data = rows.map((log) => ({
+      ...log,
+      createdAt: log.createdAt,
+    }));
 
     return {
       success: true,
@@ -91,7 +104,10 @@ export class AuditLogsService {
     return {
       success: true,
       message: 'Audit log retrieved successfully',
-      data: auditLog,
+      data: {
+        ...auditLog,
+        createdAt: auditLog.createdAt,
+      },
     };
   }
 

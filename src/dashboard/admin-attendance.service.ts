@@ -4,6 +4,11 @@ import { v5 as uuidv5 } from 'uuid';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  getBusinessDate,
+  getTimezone,
+  getWeekdayInTimezone,
+} from '@/common/utils/timezones.util';
 import { Attendance } from '@/attendance/entities/attendance.entity';
 import { Employee } from '@/employees/entities/employee.entity';
 import { Department } from '@/department/entities/department.entity';
@@ -118,8 +123,6 @@ export type EmployeeAttendanceSummary = {
 
 @Injectable()
 export class AdminAttendanceService {
-  private readonly defaultTimezone = 'UTC';
-
   // RFC 4122 DNS namespace, used to derive stable UUIDs for report rows that
   // have no persisted attendance record (e.g. absent employees).
   private static readonly ATTENDANCE_ROW_NAMESPACE =
@@ -139,23 +142,7 @@ export class AdminAttendanceService {
   ) {}
 
   private getBusinessDate(): string {
-    const tz =
-      this.configService.get<string>('ATTENDANCE_TIMEZONE') ??
-      this.defaultTimezone;
-    try {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date());
-    } catch {
-      return new Intl.DateTimeFormat('en-CA', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date());
-    }
+    return getBusinessDate(this.configService);
   }
 
   /**
@@ -173,10 +160,15 @@ export class AdminAttendanceService {
   }
 
   private getTimezone(): string {
-    return (
-      this.configService.get<string>('ATTENDANCE_TIMEZONE') ??
-      this.defaultTimezone
-    );
+    return getTimezone(this.configService);
+  }
+
+  private getWeekdayInTimezone(
+    year: number,
+    month: number,
+    day: number,
+  ): number {
+    return getWeekdayInTimezone(year, month, day, this.configService);
   }
 
   /**
@@ -247,15 +239,16 @@ export class AdminAttendanceService {
   }
 
   private getWeekday(dateStr: string): string {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    const tz = this.getTimezone();
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
       weekday: 'long',
-    });
+    }).format(new Date(`${dateStr}T12:00:00Z`));
   }
 
   private isWeekend(dateStr: string): boolean {
     const [y, m, d] = dateStr.split('-').map(Number);
-    const dayOfWeek = new Date(y, m - 1, d).getDay();
+    const dayOfWeek = this.getWeekdayInTimezone(y, m, d);
     return dayOfWeek === 5 || dayOfWeek === 6;
   }
 
@@ -268,7 +261,7 @@ export class AdminAttendanceService {
     const [y, m, d] = dateStr.split('-').map(Number);
     let count = 0;
     for (let day = 1; day <= d; day++) {
-      const dayOfWeek = new Date(y, m - 1, day).getDay();
+      const dayOfWeek = this.getWeekdayInTimezone(y, m, day);
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         count++;
       }

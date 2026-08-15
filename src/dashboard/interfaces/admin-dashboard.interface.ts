@@ -98,7 +98,7 @@ export interface RecentActivity {
   entity: string;
   description: string;
   user: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export interface AdminDashboardData {

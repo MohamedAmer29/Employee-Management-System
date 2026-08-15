@@ -5,6 +5,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import {
+  getBusinessDate,
+  getBusinessMonthStart,
+  getTimezone,
+  getWeekdayInTimezone,
+  formatInTimezone,
+} from '@/common/utils/timezones.util';
 import { Employee } from '@/employees/entities/employee.entity';
 import { Attendance } from '@/attendance/entities/attendance.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
@@ -79,23 +86,8 @@ export class DashboardService {
    * must use it rather than the server's UTC clock.
    */
   private getBusinessDate(): string {
-    const tz =
-      this.configService.get<string>('ATTENDANCE_TIMEZONE') ?? 'UTC';
-    try {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date());
-      } catch {
-        return new Intl.DateTimeFormat('en-CA', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date());
-      }
-    }
+    return getBusinessDate(this.configService);
+  }
 
   /**
    * True when the current time in the configured ATTENDANCE_TIMEZONE is at or
@@ -181,6 +173,19 @@ export class DashboardService {
     );
   }
 
+  private getTimezone(): string {
+    return getTimezone(this.configService);
+  }
+
+  private getBusinessMonthStart(): string {
+    return getBusinessMonthStart(this.configService);
+  }
+
+  private getWeekdayInTimezone(dateStr: string): number {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return getWeekdayInTimezone(y, m, d, this.configService);
+  }
+
   private getWorkingDaysInRange(startStr: string, endStr: string): string[] {
     const out: string[] = [];
     const start = new Date(`${startStr}T00:00:00Z`);
@@ -190,12 +195,13 @@ export class DashboardService {
       d <= end;
       d.setUTCDate(d.getUTCDate() + 1)
     ) {
-      const day = d.getUTCDay();
+      const dateStr = d.toISOString().split('T')[0];
+      const day = this.getWeekdayInTimezone(dateStr);
       // Match the application's weekend rule (Friday + Saturday), the same one
       // used by the monthly attendance report's isWeekend(), so non-working days
       // are never counted as absent and never drag the rate down.
       if (day !== 5 && day !== 6) {
-        out.push(d.toISOString().split('T')[0]);
+        out.push(dateStr);
       }
     }
     return out;
@@ -545,8 +551,7 @@ export class DashboardService {
   }
 
   private async getEmployeeStats(): Promise<EmployeeStats> {
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfMonth = this.getBusinessMonthStart();
 
     const [total, active, inactive, newThisMonth] = await Promise.all([
       this.employeeRepository.count(),
@@ -555,7 +560,7 @@ export class DashboardService {
       this.employeeRepository
         .createQueryBuilder('employee')
         .where('employee.createdAt >= :date', {
-          date: firstDayOfMonth.toISOString(),
+          date: `${firstDayOfMonth}T00:00:00Z`,
         })
         .getCount(),
     ]);
@@ -686,8 +691,7 @@ export class DashboardService {
   }
 
   private async getPerformanceStats(): Promise<PerformanceStats> {
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = this.getBusinessMonthStart();
 
     const [averageRating, totalReviews, reviewsThisMonth] = await Promise.all([
       this.performanceRepository
@@ -698,7 +702,7 @@ export class DashboardService {
       this.performanceRepository
         .createQueryBuilder('review')
         .where('review.reviewDate >= :date', {
-          date: firstDayOfMonth.toISOString().split('T')[0],
+          date: monthStart,
         })
         .getCount(),
     ]);
@@ -758,7 +762,7 @@ export class DashboardService {
       entity: row.auditLog_entity,
       description: row.auditLog_description,
       user: `${row.user_firstName} ${row.user_lastName}`,
-      createdAt: row.auditLog_createdAt,
+      createdAt: formatInTimezone(row.auditLog_createdAt, this.configService),
     }));
   }
 
@@ -943,9 +947,7 @@ export class DashboardService {
     employeeId: string,
   ): Promise<EmployeeAttendanceStats> {
     const today = this.getBusinessDate();
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const firstDayOfMonthStr = firstDayOfMonth.toISOString().split('T')[0];
+    const firstDayOfMonthStr = this.getBusinessMonthStart();
 
     const [todayAttendance, monthlyPresent] = await Promise.all([
       this.attendanceRepository.findOne({
@@ -1065,7 +1067,7 @@ export class DashboardService {
       entity: row.auditLog_entity,
       description: row.auditLog_description,
       user: `${row.user_firstName ?? ''} ${row.user_lastName ?? ''}`.trim(),
-      createdAt: row.auditLog_createdAt,
+      createdAt: formatInTimezone(row.auditLog_createdAt, this.configService),
     }));
   }
 
@@ -1090,9 +1092,7 @@ export class DashboardService {
   private async getEmployeePerformanceStats(
     employeeId: string,
   ): Promise<EmployeePerformanceStats> {
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthStart = firstDayOfMonth.toISOString().split('T')[0];
+    const monthStart = this.getBusinessMonthStart();
 
     const [
       averageRating,
