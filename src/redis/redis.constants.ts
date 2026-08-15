@@ -16,12 +16,12 @@ export const CACHE_TTL = {
 } as const;
 
 export const RATE_LIMIT_DEFAULTS = {
-  LOGIN_MAX_ATTEMPTS: 1000,
-  LOGIN_WINDOW_SECONDS: 900,
+  LOGIN_MAX_ATTEMPTS: 99999,
+  LOGIN_WINDOW_SECONDS: 10,
   REGISTER_MAX_ATTEMPTS: 1000,
   REGISTER_WINDOW_SECONDS: 900,
-  REFRESH_MAX_ATTEMPTS: 200,
-  REFRESH_WINDOW_SECONDS: 900,
+  REFRESH_MAX_ATTEMPTS: 9999,
+  REFRESH_WINDOW_SECONDS: 10,
 } as const;
 
 export const RedisKeys = {
@@ -35,8 +35,10 @@ export const RedisKeys = {
   departmentPattern: (): string => 'department:*',
 
   dashboardAdmin: (userId: string): string => `dashboard:admin:${userId}:v3`,
-  dashboardAdminTrend: (period: string): string => `dashboard:admin:${period}:v9`,
-  dashboardManager: (userId: string): string => `dashboard:manager:${userId}`,
+  dashboardAdminTrend: (period: string): string =>
+    `dashboard:admin:${period}:v9`,
+  dashboardManager: (userId: string): string =>
+    `dashboard:manager:${userId}:v3`,
   dashboardEmployee: (userId: string): string =>
     `dashboard:employee:${userId}:v5`,
   dashboardManagerPattern: (): string => 'dashboard:manager:*',

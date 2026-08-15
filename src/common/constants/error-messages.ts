@@ -38,6 +38,7 @@ export const ERROR_MESSAGES = {
 
   // Employee
   EMPLOYEE_NOT_FOUND: 'Employee not found',
+  EMPLOYEE_EMAIL_NOT_FOUND: 'No employee found with the provided email',
   EMPLOYEE_ALREADY_EXISTS: 'Employee with this email already exists',
   EMPLOYEE_HAS_USER: 'Employee already has a user account assigned',
   EMPLOYEE_NO_USER: 'Employee does not have a user account',

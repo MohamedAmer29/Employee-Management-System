@@ -14,7 +14,6 @@ import { Attendance } from '@/attendance/entities/attendance.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
 import { PerformanceReview } from '@/performance/entities/performance';
 import { Department } from '@/department/entities/department.entity';
-import { Role } from '@/auth/interfaces/Role.enum';
 import { AuditAction } from '@/audit-logs/enums/audit-action.enum';
 import { LeaveStatus } from '@/leave/interfaces/leave.status';
 import { CreatePerformanceDto } from '@/performance/dto/create-performance.dto';
@@ -177,35 +176,14 @@ export class ManagersService {
   ): Promise<ManagerEmployeeResponse> {
     const departmentId = await this.requireDepartment(userId);
 
-    const existingEmployee = await this.employeeRepository.findOne({
+    // Resolve the existing employee by email. The manager adds an employee
+    // that already exists in the system; if none matches, reject the request.
+    const employee = await this.employeeRepository.findOne({
       where: { email: dto.email },
+      relations: ['department', 'user'],
     });
-    if (existingEmployee) {
-      throw new ConflictException(ERROR_MESSAGES.EMPLOYEE_ALREADY_EXISTS);
-    }
-
-    let user: User | undefined;
-    if (dto.userId) {
-      const foundUser = await this.userRepository.findOne({
-        where: { id: dto.userId },
-        relations: ['employee'],
-      });
-
-      if (!foundUser) {
-        throw new NotFoundException(ERROR_MESSAGES.USER_NOT_FOUND);
-      }
-      if (foundUser.employee) {
-        throw new ConflictException(ERROR_MESSAGES.EMPLOYEE_HAS_USER);
-      }
-      if (foundUser.role !== Role.employee) {
-        throw new ConflictException(ERROR_MESSAGES.EMPLOYEE_ROLE_MISMATCH);
-      }
-      if (foundUser.username !== dto.email) {
-        throw new ConflictException(
-          'Employee email must match the user account email',
-        );
-      }
-      user = foundUser;
+    if (!employee) {
+      throw new NotFoundException(ERROR_MESSAGES.EMPLOYEE_EMAIL_NOT_FOUND);
     }
 
     const department = await this.departmentRepository.findOne({
@@ -215,33 +193,28 @@ export class ManagersService {
       throw new NotFoundException(ERROR_MESSAGES.DEPARTMENT_NOT_FOUND);
     }
 
-    const employee = this.employeeRepository.create({
-      fullName: dto.fullName,
-      email: dto.email,
-      phone: dto.phone,
-      position: dto.position,
-      isActive: true,
-      role: Role.employee,
-      user,
-      department,
-    });
+    // Assign the resolved employee to the manager's department and apply the
+    // supplied position.
+    employee.position = dto.position;
+    employee.isActive = true;
+    employee.department = department;
 
     const saved = await this.employeeRepository.save(employee);
 
-    await this.cacheInvalidation.onEmployeeChanged(saved.id, user?.id);
+    await this.cacheInvalidation.onEmployeeChanged(saved.id, saved.user?.id);
 
     this.eventEmitter.emit('audit.log.created', {
       userId,
       action: AuditAction.CREATE,
       entity: 'Employee',
       entityId: String(saved.id),
-      description: 'Manager created an employee',
+      description: 'Manager added an existing employee to their department',
       newValues: {
         fullName: saved.fullName,
         email: saved.email,
         position: saved.position,
         departmentId,
-        userId: user?.id,
+        previousDepartmentId: employee.department?.id ?? null,
       },
     });
 

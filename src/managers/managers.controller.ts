@@ -72,9 +72,9 @@ export class ManagersController {
   @Post('employees')
   @Roles(Role.manager)
   @ApiOperation({
-    summary: 'Create an employee in the manager’s department',
+    summary: 'Add an existing employee to the manager’s department',
     description:
-      'Creates a regular Employee assigned to the authenticated manager’s department. A user account may optionally be linked (must be role Employee). Role and department are assigned server-side.',
+      'Resolves an existing employee by the provided email and assigns them to the authenticated manager’s department. If no employee exists with that email, an error is returned. Role and department are assigned server-side.',
   })
   createEmployee(
     @CurrentUser('userId') userId: string,

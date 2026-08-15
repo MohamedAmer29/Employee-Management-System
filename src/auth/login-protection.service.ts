@@ -3,7 +3,7 @@ import { RedisService } from '../redis/redis.service';
 import { CACHE_TTL, RedisKeys } from '../redis/redis.constants';
 import { RateLimitExceededException } from '../common/exceptions/rate-limit.exception';
 
-const MAX_FAILED_ATTEMPTS = 5;
+const MAX_FAILED_ATTEMPTS = 999;
 
 /**
  * Brute-force protection for the login endpoint.

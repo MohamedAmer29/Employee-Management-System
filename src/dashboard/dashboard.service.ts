@@ -31,7 +31,6 @@ import {
   EmployeeStats,
   LeaveStats,
   NotificationStats,
-  PerformanceDistribution,
   PerformanceStats,
   PendingLeaveRequest,
   RecentActivity,
@@ -39,6 +38,7 @@ import {
 import {
   ManagerDashboardData,
   ManagerAttendanceStats,
+  ManagerDepartmentInfo,
   ManagerEmployeeStats,
   ManagerLeaveStats,
   ManagerPerformanceStats,
@@ -95,8 +95,7 @@ export class DashboardService {
    * working day for absence reporting.
    */
   private isPastNoon(): boolean {
-    const tz =
-      this.configService.get<string>('ATTENDANCE_TIMEZONE') ?? 'UTC';
+    const tz = this.configService.get<string>('ATTENDANCE_TIMEZONE') ?? 'UTC';
     try {
       const hour = parseInt(
         new Intl.DateTimeFormat('en-US', {
@@ -190,11 +189,7 @@ export class DashboardService {
     const out: string[] = [];
     const start = new Date(`${startStr}T00:00:00Z`);
     const end = new Date(`${endStr}T00:00:00Z`);
-    for (
-      let d = new Date(start);
-      d <= end;
-      d.setUTCDate(d.getUTCDate() + 1)
-    ) {
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
       const day = this.getWeekdayInTimezone(dateStr);
       // Match the application's weekend rule (Friday + Saturday), the same one
@@ -316,7 +311,11 @@ export class DashboardService {
     // count — never the whole company.
     const deptActiveMap = new Map<
       string,
-      { departmentId: string | null; departmentName: string | null; count: number }
+      {
+        departmentId: string | null;
+        departmentName: string | null;
+        count: number;
+      }
     >();
     for (const employee of employees) {
       const id = employee.department?.id ?? null;
@@ -353,7 +352,9 @@ export class DashboardService {
       }
       const absent = Math.max(dayExpected - dayPresent, 0);
       const attendanceRate =
-        dayExpected > 0 ? Number(((dayPresent / dayExpected) * 100).toFixed(1)) : 0;
+        dayExpected > 0
+          ? Number(((dayPresent / dayExpected) * 100).toFixed(1))
+          : 0;
 
       return {
         date,
@@ -471,27 +472,38 @@ export class DashboardService {
     }
 
     const departmentId = user.employee.department?.id;
+    const department: ManagerDepartmentInfo = {
+      id: departmentId ?? '',
+      name: user.employee.department?.name ?? 'Unassigned',
+    };
 
     const [
       employeeStats,
       attendanceStats,
+      attendanceTrend,
       leaveStats,
+      pendingLeaves,
       performanceStats,
       unreadNotifications,
       recentActivities,
     ] = await Promise.all([
       this.getManagerEmployeeStats(departmentId),
       this.getManagerAttendanceStats(departmentId),
+      this.getManagerAttendanceTrend(departmentId),
       this.getManagerLeaveStats(departmentId),
+      this.getManagerPendingLeaves(departmentId),
       this.getManagerPerformanceStats(departmentId),
       this.getUnreadNotificationCount(userId),
       this.getRecentActivitiesByDepartment(departmentId),
     ]);
 
     return {
+      department,
       employees: employeeStats,
       attendance: attendanceStats,
+      attendanceTrend,
       leave: leaveStats,
+      pendingLeaves,
       performance: performanceStats,
       unreadNotifications,
       recentActivities,
@@ -609,17 +621,19 @@ export class DashboardService {
       totalActive,
       onLeaveToday,
     ] = await Promise.all([
-      this.attendanceRepository.count({
-        where: { date: today, isPresent: true },
-      }),
       this.attendanceRepository
         .createQueryBuilder('attendance')
-        .where('attendance.date = :today', { today })
+        .where('DATE(attendance.date) = :today', { today })
+        .andWhere('attendance.isPresent = true')
+        .getCount(),
+      this.attendanceRepository
+        .createQueryBuilder('attendance')
+        .where('DATE(attendance.date) = :today', { today })
         .andWhere('attendance.checkIn IS NOT NULL')
         .getCount(),
       this.attendanceRepository
         .createQueryBuilder('attendance')
-        .where('attendance.date = :today', { today })
+        .where('DATE(attendance.date) = :today', { today })
         .andWhere('attendance.checkOut IS NOT NULL')
         .getCount(),
       this.employeeRepository.count({ where: { isActive: true } }),
@@ -789,10 +803,202 @@ export class DashboardService {
     departmentId?: string,
   ): Promise<ManagerAttendanceStats> {
     const today = this.getBusinessDate();
+    const monthStart = this.getBusinessMonthStart();
 
-    let queryBuilder = this.attendanceRepository
+    const presentCase = `(attendance.status IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.LATE}') OR (attendance.status IS NULL AND attendance.isPresent = true))`;
+
+    let attQuery = this.attendanceRepository
       .createQueryBuilder('attendance')
       .leftJoin('attendance.employee', 'employee');
+    if (departmentId) {
+      attQuery = attQuery.andWhere('employee.departmentId = :departmentId', {
+        departmentId,
+      });
+    }
+
+    const deptCond = departmentId
+      ? 'employee.departmentId = :departmentId'
+      : '1=1';
+
+    const [totalActive, onLeaveToday, presentToday, lateToday, monthlyPresent] =
+      await Promise.all([
+        this.employeeRepository
+          .createQueryBuilder('employee')
+          .where('employee.isActive = true')
+          .andWhere(deptCond, { departmentId })
+          .getCount(),
+        this.leaveRepository
+          .createQueryBuilder('leave')
+          .leftJoin('leave.employee', 'employee')
+          .where('leave.status = :status', { status: LeaveStatus.APPROVED })
+          .andWhere('leave.startDate <= :today', { today })
+          .andWhere('leave.endDate >= :today', { today })
+          .andWhere('employee.isActive = true')
+          .andWhere(deptCond, { departmentId })
+          .getCount(),
+        attQuery
+          .clone()
+          .andWhere('employee.isActive = true')
+          .andWhere('DATE(attendance.date) = :today', { today })
+          .andWhere(presentCase)
+          .getCount(),
+        attQuery
+          .clone()
+          .andWhere('employee.isActive = true')
+          .andWhere('DATE(attendance.date) = :today', { today })
+          .andWhere(`attendance.status = '${AttendanceStatus.LATE}'`)
+          .getCount(),
+        attQuery
+          .clone()
+          .andWhere('employee.isActive = true')
+          .andWhere('attendance.date >= :monthStart', { monthStart })
+          .andWhere('attendance.date <= :today', { today })
+          .andWhere(presentCase)
+          .getCount(),
+      ]);
+
+    const expectedToday = Math.max(totalActive - onLeaveToday, 0);
+    const absentToday = Math.max(expectedToday - presentToday, 0);
+
+    const attendanceRate =
+      expectedToday > 0
+        ? Math.min((presentToday / expectedToday) * 100, 100)
+        : 0;
+
+    const workingDaysInMonth = this.getWorkingDaysInRange(
+      monthStart,
+      today,
+    ).length;
+    const expectedMonth = workingDaysInMonth * totalActive;
+    const monthlyRate =
+      expectedMonth > 0
+        ? Math.min((monthlyPresent / expectedMonth) * 100, 100)
+        : 0;
+
+    return {
+      presentToday,
+      absentToday,
+      lateToday,
+      onLeaveToday,
+      attendanceRate: parseFloat(attendanceRate.toFixed(2)),
+      monthlyRate: parseFloat(monthlyRate.toFixed(2)),
+    };
+  }
+
+  private async getManagerAttendanceTrend(
+    departmentId?: string,
+  ): Promise<AttendanceTrend[]> {
+    const today = this.getBusinessDate();
+    const todayDate = new Date(`${today}T00:00:00Z`);
+    const subtractDays = (n: number): string => {
+      const d = new Date(todayDate);
+      d.setUTCDate(d.getUTCDate() - n);
+      return d.toISOString().split('T')[0];
+    };
+    const startDateStr = subtractDays(29);
+    const workingDays = this.getWorkingDaysInRange(startDateStr, today);
+
+    const deptCond = departmentId
+      ? 'employee.departmentId = :departmentId'
+      : '1=1';
+
+    const attRows = await this.attendanceRepository
+      .createQueryBuilder('attendance')
+      .leftJoin('attendance.employee', 'employee')
+      .select("TO_CHAR(attendance.date, 'YYYY-MM-DD')", 'date')
+      .addSelect(
+        `COUNT(CASE WHEN attendance.status IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.LATE}') OR (attendance.status IS NULL AND attendance.isPresent = true) THEN 1 END)`,
+        'present',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN attendance.status = '${AttendanceStatus.LATE}' THEN 1 END)`,
+        'late',
+      )
+      .where('attendance.date >= :start', { start: startDateStr })
+      .andWhere('attendance.date <= :end', { end: today })
+      .andWhere('employee.isActive = true')
+      .andWhere(deptCond, { departmentId })
+      .groupBy('attendance.date')
+      .getRawMany<{ date: string; present: string; late: string }>();
+
+    const attByDate = new Map<string, { present: number; late: number }>();
+    for (const row of attRows) {
+      attByDate.set(row.date, {
+        present: parseInt(row.present) || 0,
+        late: parseInt(row.late) || 0,
+      });
+    }
+
+    const leaveRows = await this.leaveRepository
+      .createQueryBuilder('leave')
+      .leftJoin('leave.employee', 'employee')
+      .select('leave.employeeId', 'employeeId')
+      .addSelect("TO_CHAR(leave.startDate, 'YYYY-MM-DD')", 'startDate')
+      .addSelect("TO_CHAR(leave.endDate, 'YYYY-MM-DD')", 'endDate')
+      .where('leave.status = :status', { status: LeaveStatus.APPROVED })
+      .andWhere('leave.startDate <= :end', { end: today })
+      .andWhere('leave.endDate >= :start', { start: startDateStr })
+      .andWhere('employee.isActive = true')
+      .andWhere(deptCond, { departmentId })
+      .getRawMany<{
+        employeeId: string;
+        startDate: string;
+        endDate: string;
+      }>();
+
+    const totalActive = await this.employeeRepository
+      .createQueryBuilder('employee')
+      .where('employee.isActive = true')
+      .andWhere(deptCond, { departmentId })
+      .getCount();
+
+    const onLeaveOn = (date: string): number => {
+      let count = 0;
+      for (const leave of leaveRows) {
+        if (date >= leave.startDate && date <= leave.endDate) {
+          count++;
+        }
+      }
+      return count;
+    };
+
+    return workingDays.map((date) => {
+      const att = attByDate.get(date) ?? { present: 0, late: 0 };
+      const onLeave = onLeaveOn(date);
+      const expected = Math.max(totalActive - onLeave, 0);
+      const absent = Math.max(expected - att.present, 0);
+      const attendanceRate =
+        expected > 0
+          ? Math.min(Number(((att.present / expected) * 100).toFixed(1)), 100)
+          : 0;
+      return {
+        date,
+        present: att.present,
+        absent,
+        late: att.late,
+        onLeave,
+        attendanceRate,
+      };
+    });
+  }
+
+  private async getManagerPendingLeaves(
+    departmentId?: string,
+  ): Promise<PendingLeaveRequest[]> {
+    let queryBuilder = this.leaveRepository
+      .createQueryBuilder('leave')
+      .leftJoin('leave.employee', 'employee')
+      .select([
+        'leave.id',
+        'employee.fullName',
+        'leave.startDate',
+        'leave.endDate',
+        'leave.reason',
+        'leave.status',
+      ])
+      .where('leave.status = :status', { status: LeaveStatus.PENDING })
+      .orderBy('leave.startDate', 'ASC')
+      .limit(10);
 
     if (departmentId) {
       queryBuilder = queryBuilder.andWhere(
@@ -801,44 +1007,15 @@ export class DashboardService {
       );
     }
 
-    const [presentToday, totalActive, onLeaveToday] = await Promise.all([
-      queryBuilder
-        .clone()
-        .andWhere('attendance.date = :today', { today })
-        .andWhere('attendance.isPresent = true')
-        .getCount(),
-      this.employeeRepository
-        .createQueryBuilder('employee')
-        .where('employee.isActive = true')
-        .andWhere(
-          departmentId ? 'employee.departmentId = :departmentId' : '1=1',
-          { departmentId },
-        )
-        .getCount(),
-      this.leaveRepository
-        .createQueryBuilder('leave')
-        .leftJoin('leave.employee', 'employee')
-        .where('leave.status = :status', { status: LeaveStatus.APPROVED })
-        .andWhere('leave.startDate <= :today', { today })
-        .andWhere('leave.endDate >= :today', { today })
-        .andWhere(
-          departmentId ? 'employee.departmentId = :departmentId' : '1=1',
-          { departmentId },
-        )
-        .getCount(),
-    ]);
-
-    const expectedToday = Math.max(totalActive - onLeaveToday, 0);
-    const absentToday = Math.max(expectedToday - presentToday, 0);
-
-    const attendanceRate =
-      expectedToday > 0 ? (presentToday / expectedToday) * 100 : 0;
-
-    return {
-      presentToday,
-      absentToday,
-      attendanceRate: parseFloat(attendanceRate.toFixed(2)),
-    };
+    const rows = await queryBuilder.getRawMany();
+    return rows.map((row) => ({
+      id: row.leave_id,
+      employeeName: row.employee_fullName,
+      startDate: row.leave_startDate,
+      endDate: row.leave_endDate,
+      reason: row.leave_reason,
+      status: row.leave_status,
+    }));
   }
 
   private async getManagerLeaveStats(
@@ -876,25 +1053,64 @@ export class DashboardService {
   private async getManagerPerformanceStats(
     departmentId?: string,
   ): Promise<ManagerPerformanceStats> {
-    let queryBuilder = this.performanceRepository
-      .createQueryBuilder('review')
-      .leftJoin('review.employee', 'employee');
+    const monthStart = this.getBusinessMonthStart();
+    const deptCond = departmentId
+      ? 'employee.departmentId = :departmentId'
+      : '1=1';
 
-    if (departmentId) {
-      queryBuilder = queryBuilder.andWhere(
-        'employee.departmentId = :departmentId',
-        { departmentId },
-      );
-    }
+    const buildBase = () => {
+      const qb = this.performanceRepository
+        .createQueryBuilder('review')
+        .leftJoin('review.employee', 'employee');
+      if (departmentId) {
+        qb.andWhere(deptCond, { departmentId });
+      }
+      return qb;
+    };
 
-    const [averageRating, totalReviews] = await Promise.all([
-      queryBuilder.clone().select('AVG(review.rating)', 'avg').getRawOne(),
-      queryBuilder.getCount(),
-    ]);
+    const [avgRow, totalReviews, reviewsThisMonth, distRows, latestRaw] =
+      await Promise.all([
+        buildBase().select('AVG(review.rating)', 'avg').getRawOne(),
+        buildBase().getCount(),
+        buildBase()
+          .andWhere('review.reviewDate >= :date', { date: monthStart })
+          .getCount(),
+        buildBase()
+          .select(['review.rating', 'COUNT(review.id) as count'])
+          .groupBy('review.rating')
+          .orderBy('review.rating', 'ASC')
+          .getRawMany(),
+        this.performanceRepository
+          .createQueryBuilder('review')
+          .leftJoin('review.employee', 'employee')
+          .select([
+            'review.rating',
+            'review.feedback',
+            'review.reviewDate',
+            'employee.fullName',
+          ])
+          .where(deptCond, { departmentId })
+          .orderBy('review.reviewDate', 'DESC')
+          .limit(1)
+          .getRawOne(),
+      ]);
 
     return {
-      averageRating: parseFloat(averageRating.avg) || 0,
+      averageRating: parseFloat(avgRow.avg) || 0,
       totalReviews,
+      reviewsThisMonth,
+      performanceDistribution: distRows.map((row) => ({
+        rating: row.review_rating,
+        count: parseInt(row.count, 10),
+      })),
+      latestReview: latestRaw
+        ? {
+            employeeName: latestRaw.employee_fullName ?? '',
+            rating: latestRaw.review_rating,
+            feedback: latestRaw.review_feedback,
+            reviewDate: latestRaw.review_reviewDate,
+          }
+        : null,
     };
   }
 
@@ -973,7 +1189,11 @@ export class DashboardService {
 
     const monthlyRateValue = parseFloat(monthlyRate.toFixed(2));
     const presentToday = todayAttendance?.isPresent ? 1 : 0;
-    const absentToday = todayAttendance ? (todayAttendance.isPresent ? 0 : 1) : 1;
+    const absentToday = todayAttendance
+      ? todayAttendance.isPresent
+        ? 0
+        : 1
+      : 1;
 
     return {
       today: {
