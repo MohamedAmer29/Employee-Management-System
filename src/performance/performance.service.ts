@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PerformanceReview } from './entities/performance';
 import { CreatePerformanceDto } from './dto/create-performance.dto';
 import { UpdatePerformanceDto } from './dto/update-performance.dto';
@@ -104,8 +104,10 @@ export class PerformanceService {
       return reviews.map((review) => this.toResponse(review));
     }
 
+    // Admin/manager viewers see the reviewer's name and role instead of the
+    // raw reviewer id.
     const reviews = await this.performanceRepository.find({ relations });
-    return reviews.map((review) => this.toResponse(review));
+    return this.withReviewerDetails(reviews);
   }
 
   async update(id: string, dto: UpdatePerformanceDto) {
@@ -203,5 +205,36 @@ export class PerformanceService {
         profilePicture: user?.profilePicture ?? null,
       },
     };
+  }
+
+  /**
+   * Resolves the reviewer (a user id stored on the review) to a display name
+   * and role, replacing the raw id in the response for admin/manager viewers.
+   */
+  private async withReviewerDetails(reviews: PerformanceReview[]) {
+    if (reviews.length === 0) return [];
+
+    const reviewerIds = [...new Set(reviews.map((r) => r.reviewer))];
+    const reviewerUsers = await this.userRepository.find({
+      where: { id: In(reviewerIds) },
+    });
+    const reviewerMap = new Map(reviewerUsers.map((u) => [String(u.id), u]));
+
+    return reviews.map((review) => {
+      const { user, ...employee } = review.employee;
+      const reviewerUser = reviewerMap.get(String(review.reviewer));
+      const { reviewer, ...rest } = review;
+      return {
+        ...rest,
+        employee: {
+          ...employee,
+          profilePicture: user?.profilePicture ?? null,
+        },
+        reviewerName: reviewerUser
+          ? `${reviewerUser.firstName} ${reviewerUser.lastName}`.trim()
+          : null,
+        reviewerRole: reviewerUser?.role ?? null,
+      };
+    });
   }
 }

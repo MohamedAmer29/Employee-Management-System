@@ -6,7 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Employee } from '@/employees/entities/employee.entity';
 import { User } from '@/users/entities/user.entity';
@@ -49,8 +49,13 @@ type ManagerLeaveResponse = Omit<LeaveRequest, 'employee'> & {
   employee: Omit<Employee, 'user'> & { profilePicture: string | null };
 };
 
-type ManagerPerformanceResponse = Omit<PerformanceReview, 'employee'> & {
+type ManagerPerformanceResponse = Omit<
+  PerformanceReview,
+  'employee' | 'reviewer'
+> & {
   employee: Omit<Employee, 'user'> & { profilePicture: string | null };
+  reviewerName: string | null;
+  reviewerRole: string | null;
 };
 
 type PaginatedEmployees = {
@@ -506,7 +511,7 @@ export class ManagersService {
       .orderBy('review.reviewDate', 'DESC')
       .getMany();
 
-    return reviews.map((review) => this.toPerformanceResponse(review));
+    return this.mapPerformanceReviews(reviews);
   }
 
   async getPerformanceForEmployee(
@@ -526,7 +531,7 @@ export class ManagersService {
       order: { reviewDate: 'DESC' },
     });
 
-    return reviews.map((review) => this.toPerformanceResponse(review));
+    return this.mapPerformanceReviews(reviews);
   }
 
   async createPerformance(
@@ -706,16 +711,32 @@ export class ManagersService {
     } as ManagerLeaveResponse;
   }
 
-  private toPerformanceResponse(
-    review: PerformanceReview,
-  ): ManagerPerformanceResponse {
-    const { user, ...employee } = review.employee;
-    return {
-      ...review,
-      employee: {
-        ...employee,
-        profilePicture: user?.profilePicture ?? null,
-      },
-    } as ManagerPerformanceResponse;
+  private async mapPerformanceReviews(
+    reviews: PerformanceReview[],
+  ): Promise<ManagerPerformanceResponse[]> {
+    if (reviews.length === 0) return [];
+
+    const reviewerIds = [...new Set(reviews.map((r) => r.reviewer))];
+    const reviewerUsers = await this.userRepository.find({
+      where: { id: In(reviewerIds) },
+    });
+    const reviewerMap = new Map(reviewerUsers.map((u) => [String(u.id), u]));
+
+    return reviews.map((review) => {
+      const { user, ...employee } = review.employee;
+      const reviewerUser = reviewerMap.get(String(review.reviewer));
+      const { reviewer, ...rest } = review;
+      return {
+        ...rest,
+        employee: {
+          ...employee,
+          profilePicture: user?.profilePicture ?? null,
+        },
+        reviewerName: reviewerUser
+          ? `${reviewerUser.firstName} ${reviewerUser.lastName}`.trim()
+          : null,
+        reviewerRole: reviewerUser?.role ?? null,
+      } as ManagerPerformanceResponse;
+    });
   }
 }

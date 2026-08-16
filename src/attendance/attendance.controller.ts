@@ -71,7 +71,7 @@ export class AttendanceController {
   }
 
   @Get('my-attendance')
-  @Roles(Role.employee)
+  @Roles(Role.employee, Role.manager, Role.admin)
   @ApiOperation({ summary: "Get the current employee's attendance history" })
   @ApiResponse({
     status: 200,
@@ -86,7 +86,7 @@ export class AttendanceController {
   }
 
   @Get('my-attendance/summary')
-  @Roles(Role.employee)
+  @Roles(Role.employee, Role.manager, Role.admin)
   @ApiOperation({ summary: "Get the current employee's attendance summary" })
   @ApiResponse({
     status: 200,
