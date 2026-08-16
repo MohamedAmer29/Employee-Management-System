@@ -1,0 +1,7 @@
+export enum DeductionType {
+  ABSENCE = 'ABSENCE',
+  LATE = 'LATE',
+  UNPAID_LEAVE = 'UNPAID_LEAVE',
+  DISCIPLINARY = 'DISCIPLINARY',
+  OTHER = 'OTHER',
+}

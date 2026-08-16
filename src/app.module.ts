@@ -11,6 +11,8 @@ import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { DepartmentModule } from './department/department.module';
 import { PerformanceModule } from './performance/performance.module';
+import { TasksModule } from './tasks/tasks.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -48,6 +50,8 @@ import { validateEnv } from './config/env.validation';
     AttendanceModule,
     LeaveModule,
     PerformanceModule,
+    TasksModule,
+    PayrollModule,
     AuditLogsModule,
     NotificationsModule,
     DashboardModule,

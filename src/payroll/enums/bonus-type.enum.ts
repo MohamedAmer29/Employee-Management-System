@@ -1,0 +1,6 @@
+export enum BonusType {
+  PERFORMANCE = 'PERFORMANCE',
+  OVERTIME = 'OVERTIME',
+  ALLOWANCE = 'ALLOWANCE',
+  OTHER = 'OTHER',
+}

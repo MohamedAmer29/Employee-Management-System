@@ -7,6 +7,11 @@ import { LeaveRequest } from '../leave/entities/leave.entity';
 import { PerformanceReview } from '../performance/entities/performance';
 import { Notification } from '../notifications/notification.entity';
 import { AuditLog } from '../audit-logs/audit-log.entity';
+import { Task } from '../tasks/entities/task.entity';
+import { Compensation } from '../payroll/entities/compensation.entity';
+import { SalaryDeduction } from '../payroll/entities/salary-deduction.entity';
+import { SalaryBonus } from '../payroll/entities/salary-bonus.entity';
+import { SalaryHistory } from '../payroll/entities/salary-history.entity';
 
 /**
  * Standalone TypeORM DataSource used only by the TypeORM CLI for migrations.
@@ -45,6 +50,11 @@ export const AppDataSource = new DataSource({
     PerformanceReview,
     Notification,
     AuditLog,
+    Task,
+    Compensation,
+    SalaryDeduction,
+    SalaryBonus,
+    SalaryHistory,
   ],
   migrations: [`${rootDir}/database/migrations/*.${extension}`],
   migrationsTableName: 'migrations',
