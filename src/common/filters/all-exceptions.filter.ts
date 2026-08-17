@@ -195,9 +195,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
           };
         }
 
+        // Surface the underlying database error so the real cause is visible
+        // instead of a generic 500 (e.g. "invalid input syntax for type uuid").
+        // In production this is suppressed to avoid leaking internal details.
+        const isProduction = process.env.NODE_ENV === 'production';
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          message: ERROR_MESSAGES.DATABASE_ERROR,
+          message:
+            !isProduction && driverError?.message
+              ? driverError.message
+              : ERROR_MESSAGES.DATABASE_ERROR,
           errorCode: ErrorCode.DATABASE_ERROR,
         };
     }

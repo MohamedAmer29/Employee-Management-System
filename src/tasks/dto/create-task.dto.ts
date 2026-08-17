@@ -24,23 +24,23 @@ export class CreateTaskDto {
 
   @ApiProperty({
     description:
-      'Id of the employee the task is assigned to (XOR with assignedManagerId)',
+      'Id of the employee the task is assigned to (XOR with managerId)',
     required: false,
   })
   @IsOptional()
   @Transform(toIdString)
   @IsNumberString()
-  assignedEmployeeId?: string;
+  employeeId?: string;
 
   @ApiProperty({
     description:
-      'Id of the manager the task is assigned to (XOR with assignedEmployeeId)',
+      'Id of the manager the task is assigned to (XOR with employeeId)',
     required: false,
   })
   @IsOptional()
   @Transform(toIdString)
   @IsNumberString()
-  assignedManagerId?: string;
+  managerId?: string;
 
   @ApiProperty({
     description: 'Task priority',

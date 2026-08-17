@@ -66,7 +66,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     // task
     // ---------------------------------------------------------------------
     await queryRunner.query(`
-      CREATE TABLE "task" (
+      CREATE TABLE IF NOT EXISTS "task" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "title" character varying NOT NULL,
         "description" text,
@@ -111,7 +111,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     // compensation
     // ---------------------------------------------------------------------
     await queryRunner.query(`
-      CREATE TABLE "compensation" (
+      CREATE TABLE IF NOT EXISTS "compensation" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "employeeId" integer,
         "managerId" integer,
@@ -158,7 +158,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     // salary_deduction
     // ---------------------------------------------------------------------
     await queryRunner.query(`
-      CREATE TABLE "salary_deduction" (
+      CREATE TABLE IF NOT EXISTS "salary_deduction" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "compensationId" uuid NOT NULL,
         "amount" numeric(12,2) NOT NULL,
@@ -179,7 +179,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     // salary_bonus
     // ---------------------------------------------------------------------
     await queryRunner.query(`
-      CREATE TABLE "salary_bonus" (
+      CREATE TABLE IF NOT EXISTS "salary_bonus" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "compensationId" uuid NOT NULL,
         "amount" numeric(12,2) NOT NULL,
@@ -200,7 +200,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     // salary_history
     // ---------------------------------------------------------------------
     await queryRunner.query(`
-      CREATE TABLE "salary_history" (
+      CREATE TABLE IF NOT EXISTS "salary_history" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "employeeId" integer,
         "managerId" integer,
@@ -237,3 +237,4 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     await queryRunner.query(`DROP TYPE IF EXISTS "public"."task_status_enum"`);
   }
 }
+

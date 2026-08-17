@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -99,7 +100,7 @@ export class PayrollController {
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Get a payroll record by id' })
   findOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('role') role: Role,
     @CurrentUser('userId') userId: string,
   ) {
@@ -110,7 +111,7 @@ export class PayrollController {
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Add a deduction to a payroll record' })
   addDeduction(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateDeductionDto,
   ) {
@@ -121,7 +122,7 @@ export class PayrollController {
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Add a bonus to a payroll record' })
   addBonus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateBonusDto,
   ) {
@@ -132,7 +133,7 @@ export class PayrollController {
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Approve a payroll record' })
   approve(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
   ) {
     return this.payrollService.approve(id, userId);
@@ -142,7 +143,7 @@ export class PayrollController {
   @Roles(Role.admin)
   @ApiOperation({ summary: 'Mark a payroll record as paid' })
   markPaid(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
   ) {
     return this.payrollService.markPaid(id, userId);

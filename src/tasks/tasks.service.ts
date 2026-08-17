@@ -48,18 +48,24 @@ export class TasksService {
     role: Role,
     dto: CreateTaskDto,
   ): Promise<Record<string, unknown>> {
-    const hasEmployee = !!dto.assignedEmployeeId;
-    const hasManager = !!dto.assignedManagerId;
-    if (hasEmployee === hasManager) {
+    const employeeId = dto.employeeId;
+    const managerId = dto.managerId;
+    const hasEmployee = !!employeeId;
+    const hasManager = !!managerId;
+
+    if (!hasEmployee && !hasManager) {
       throw new BadRequestException(
-        'Provide exactly one of assignedEmployeeId or assignedManagerId',
+        'Either employeeId or managerId must be provided',
+      );
+    }
+    if (hasEmployee && hasManager) {
+      throw new BadRequestException(
+        'Provide exactly one of employeeId or managerId, not both',
       );
     }
 
     const actor = await this.getActor(currentUserId, role);
-    const assigneeId = hasEmployee
-      ? dto.assignedEmployeeId!
-      : dto.assignedManagerId!;
+    const assigneeId = hasEmployee ? employeeId! : managerId!;
 
     const assignee = await this.employeeRepository.findOne({
       where: { id: assigneeId },

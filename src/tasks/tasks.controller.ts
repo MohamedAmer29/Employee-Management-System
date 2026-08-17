@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -64,7 +65,7 @@ export class TasksController {
   @Roles(Role.admin, Role.manager, Role.employee)
   @ApiOperation({ summary: 'Get a task by id' })
   findOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('role') role: Role,
     @CurrentUser('userId') userId: string,
   ) {
@@ -75,7 +76,7 @@ export class TasksController {
   @Roles(Role.admin, Role.manager)
   @ApiOperation({ summary: 'Update a task (admin/manager)' })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskDto,
     @CurrentUser('role') role: Role,
     @CurrentUser('userId') userId: string,
@@ -87,7 +88,7 @@ export class TasksController {
   @Roles(Role.manager, Role.employee)
   @ApiOperation({ summary: 'Update a task status (manager/employee)' })
   updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskStatusDto,
     @CurrentUser('role') role: Role,
     @CurrentUser('userId') userId: string,
@@ -99,7 +100,7 @@ export class TasksController {
   @Roles(Role.admin, Role.manager)
   @ApiOperation({ summary: 'Delete a task (admin/manager)' })
   remove(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('role') role: Role,
     @CurrentUser('userId') userId: string,
   ) {
