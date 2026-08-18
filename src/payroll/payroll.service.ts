@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Compensation } from './entities/compensation.entity';
 import { SalaryDeduction } from './entities/salary-deduction.entity';
@@ -192,7 +192,7 @@ export class PayrollService {
       });
       this.assertTargetVisible(employee, actor, role);
     }
-    const items = await this.compensationRepository
+    const qb = this.compensationRepository
       .createQueryBuilder('comp')
       .leftJoinAndSelect('comp.employee', 'employee')
       .leftJoinAndSelect('employee.user', 'employeeUser')
@@ -202,10 +202,10 @@ export class PayrollService {
       .leftJoinAndSelect('manager.department', 'managerDept')
       .leftJoinAndSelect('comp.deductions', 'deductions')
       .leftJoinAndSelect('comp.bonuses', 'bonuses')
-      .where('employee.id = :employeeId', { employeeId })
-      .orderBy('comp.year', 'DESC')
-      .addOrderBy('comp.month', 'DESC')
-      .getMany();
+      .where('employee.id = :employeeId', { employeeId });
+    this.applyCommonFilters(qb, query);
+    qb.orderBy('comp.year', 'DESC').addOrderBy('comp.month', 'DESC');
+    const items = await qb.getMany();
     return items.map((c) => this.toResponse(c));
   }
 
@@ -223,7 +223,7 @@ export class PayrollService {
       });
       this.assertTargetVisible(manager, actor, role);
     }
-    const items = await this.compensationRepository
+    const qb = this.compensationRepository
       .createQueryBuilder('comp')
       .leftJoinAndSelect('comp.employee', 'employee')
       .leftJoinAndSelect('employee.user', 'employeeUser')
@@ -233,10 +233,10 @@ export class PayrollService {
       .leftJoinAndSelect('manager.department', 'managerDept')
       .leftJoinAndSelect('comp.deductions', 'deductions')
       .leftJoinAndSelect('comp.bonuses', 'bonuses')
-      .where('manager.user.id = :managerUserId', { managerUserId })
-      .orderBy('comp.year', 'DESC')
-      .addOrderBy('comp.month', 'DESC')
-      .getMany();
+      .where('manager.user.id = :managerUserId', { managerUserId });
+    this.applyCommonFilters(qb, query);
+    qb.orderBy('comp.year', 'DESC').addOrderBy('comp.month', 'DESC');
+    const items = await qb.getMany();
     return items.map((c) => this.toResponse(c));
   }
 
@@ -307,6 +307,21 @@ export class PayrollService {
     };
   }
 
+  private applyCommonFilters(
+    qb: SelectQueryBuilder<Compensation>,
+    query: PayrollQueryDto,
+  ): void {
+    if (query.month) {
+      qb.andWhere('comp.month = :month', { month: query.month });
+    }
+    if (query.year) {
+      qb.andWhere('comp.year = :year', { year: query.year });
+    }
+    if (query.status) {
+      qb.andWhere('comp.status = :status', { status: query.status });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Deductions / bonuses
   // ---------------------------------------------------------------------------
@@ -314,11 +329,12 @@ export class PayrollService {
   async addDeduction(
     compensationId: string,
     currentUserId: string,
+    role: Role,
     dto: CreateDeductionDto,
   ): Promise<Record<string, unknown>> {
     const compensation = await this.findOneEntity(compensationId);
-    const actor = await this.getActor(currentUserId, Role.admin);
-    this.authorize(compensation, actor, Role.admin, false);
+    const actor = await this.getActor(currentUserId, role);
+    this.authorize(compensation, actor, role, false);
 
     const creator = await this.userRepository.findOne({
       where: { id: currentUserId },
@@ -331,15 +347,18 @@ export class PayrollService {
       createdBy: creator ?? undefined,
     });
     await this.deductionRepository.save(deduction);
-    await this.recompute(compensation);
-    await this.compensationRepository.save(compensation);
+
+    // Reload so `deductions` includes the new row before recomputing totals.
+    const fresh = await this.findOneEntity(compensationId);
+    await this.recompute(fresh);
+    await this.compensationRepository.save(fresh);
 
     this.eventEmitter.emit('audit.log.created', {
       userId: currentUserId,
       action: AuditAction.DEDUCTION_ADDED,
       entity: 'Compensation',
-      entityId: compensation.id,
-      description: `Deduction added to payroll ${compensation.id}`,
+      entityId: fresh.id,
+      description: `Deduction added to payroll ${fresh.id}`,
       newValues: { amount: dto.amount, type: dto.type },
     });
     return this.toResponse(await this.findOneEntity(compensationId));
@@ -348,11 +367,12 @@ export class PayrollService {
   async addBonus(
     compensationId: string,
     currentUserId: string,
+    role: Role,
     dto: CreateBonusDto,
   ): Promise<Record<string, unknown>> {
     const compensation = await this.findOneEntity(compensationId);
-    const actor = await this.getActor(currentUserId, Role.admin);
-    this.authorize(compensation, actor, Role.admin, false);
+    const actor = await this.getActor(currentUserId, role);
+    this.authorize(compensation, actor, role, false);
 
     const creator = await this.userRepository.findOne({
       where: { id: currentUserId },
@@ -365,15 +385,18 @@ export class PayrollService {
       createdBy: creator ?? undefined,
     });
     await this.bonusRepository.save(bonus);
-    await this.recompute(compensation);
-    await this.compensationRepository.save(compensation);
+
+    // Reload so `bonuses` includes the new row before recomputing totals.
+    const fresh = await this.findOneEntity(compensationId);
+    await this.recompute(fresh);
+    await this.compensationRepository.save(fresh);
 
     this.eventEmitter.emit('audit.log.created', {
       userId: currentUserId,
       action: AuditAction.BONUS_ADDED,
       entity: 'Compensation',
-      entityId: compensation.id,
-      description: `Bonus added to payroll ${compensation.id}`,
+      entityId: fresh.id,
+      description: `Bonus added to payroll ${fresh.id}`,
       newValues: { amount: dto.amount, type: dto.type },
     });
     return this.toResponse(await this.findOneEntity(compensationId));

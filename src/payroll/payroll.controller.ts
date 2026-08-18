@@ -108,25 +108,27 @@ export class PayrollController {
   }
 
   @Post(':id/deductions')
-  @Roles(Role.admin)
+  @Roles(Role.admin, Role.manager)
   @ApiOperation({ summary: 'Add a deduction to a payroll record' })
   addDeduction(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
     @Body() dto: CreateDeductionDto,
   ) {
-    return this.payrollService.addDeduction(id, userId, dto);
+    return this.payrollService.addDeduction(id, userId, role, dto);
   }
 
   @Post(':id/bonuses')
-  @Roles(Role.admin)
+  @Roles(Role.admin, Role.manager)
   @ApiOperation({ summary: 'Add a bonus to a payroll record' })
   addBonus(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
     @Body() dto: CreateBonusDto,
   ) {
-    return this.payrollService.addBonus(id, userId, dto);
+    return this.payrollService.addBonus(id, userId, role, dto);
   }
 
   @Patch(':id/approve')
