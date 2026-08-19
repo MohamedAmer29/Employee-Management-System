@@ -19,6 +19,7 @@ const redisClientProvider: Provider = {
       password: config.password,
       db: config.db,
       keyPrefix: config.keyPrefix,
+      tls: config.tls,
       connectTimeout: config.connectTimeout,
       maxRetriesPerRequest: config.maxRetriesPerRequest,
       enableOfflineQueue: config.enableOfflineQueue,

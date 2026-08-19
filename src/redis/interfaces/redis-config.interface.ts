@@ -7,6 +7,7 @@ export interface RedisConfig {
   connectTimeout: number;
   maxRetriesPerRequest: number | null;
   enableOfflineQueue: boolean;
+  tls?: Record<string, unknown>;
 }
 
 export interface RedisHealthStatus {
