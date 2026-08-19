@@ -4,20 +4,31 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
+  const dbUrl = configService.get<string>('DATABASE_URL');
+  const nodeEnv = configService.get<string>('NODE_ENV');
+  const isProduction = nodeEnv === 'production';
+
+  if (dbUrl && dbUrl.trim().length > 0) {
+    return {
+      type: 'postgres',
+      url: dbUrl,
+      ssl: dbUrl.includes('sslmode=require') || isProduction ? { rejectUnauthorized: false } : false,
+      autoLoadEntities: true,
+      synchronize: !isProduction,
+      migrationsRun: false,
+      logging: nodeEnv === 'development',
+    };
+  }
+
   const dbType = configService.get<string>('TYPE') ?? 'postgres';
   const validTypes = ['postgres', 'mysql', 'mariadb', 'sqlite', 'mssql'];
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   if (!validTypes.includes(dbType as any)) {
     throw new Error(
       `Invalid database type: ${dbType}. Must be one of: ${validTypes.join(', ')}`,
     );
   }
 
-  const nodeEnv = configService.get<string>('NODE_ENV');
-  const isProduction = nodeEnv === 'production';
-
   return {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     type: dbType as any,
     host: resolveDatabaseHost(configService),
     port: Number(configService.get<string>('DATABASE_PORT') ?? 5432),
@@ -25,10 +36,11 @@ export const getDatabaseConfig = (
     password:
       configService.get<string>('DATABASE_PASSWORD') ??
       configService.get<string>('PASSWORD'),
-    database: configService.get<string>('DATABASE_NAME') ?? configService.get<string>('DATABASE'),
+    database:
+      configService.get<string>('DATABASE_NAME') ??
+      configService.get<string>('DATABASE'),
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
     autoLoadEntities: true,
-    // Schema is managed by migrations in production. Auto-synchronising a
-    // production database can silently drop columns and lose data.
     synchronize: !isProduction,
     migrationsRun: false,
     logging: nodeEnv === 'development',

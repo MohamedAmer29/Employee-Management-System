@@ -34,30 +34,60 @@ const rootDir = isCompiled ? 'dist' : 'src';
 // dotenv is a devDependency that gets pruned from the production image.
 // For local CLI use the npm scripts load .env via `dotenv/config`.
 
-export const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: process.env.DATABASE_HOST ?? process.env.HOST ?? 'localhost',
-  port: Number(process.env.DATABASE_PORT ?? 5432),
-  username: process.env.DATABASE_USERNAME,
-  password: process.env.DATABASE_PASSWORD ?? process.env.PASSWORD,
-  database: process.env.DATABASE_NAME ?? process.env.DATABASE,
-  entities: [
-    User,
-    Employee,
-    Department,
-    Attendance,
-    LeaveRequest,
-    PerformanceReview,
-    Notification,
-    AuditLog,
-    Task,
-    Compensation,
-    SalaryDeduction,
-    SalaryBonus,
-    SalaryHistory,
-  ],
-  migrations: [`${rootDir}/database/migrations/*.${extension}`],
-  migrationsTableName: 'migrations',
-  synchronize: false,
-  logging: process.env.NODE_ENV === 'development',
-});
+const dbUrl = process.env.DATABASE_URL;
+
+export const AppDataSource = new DataSource(
+  dbUrl && dbUrl.trim().length > 0
+    ? {
+        type: 'postgres',
+        url: dbUrl,
+        ssl: { rejectUnauthorized: false },
+        entities: [
+          User,
+          Employee,
+          Department,
+          Attendance,
+          LeaveRequest,
+          PerformanceReview,
+          Notification,
+          AuditLog,
+          Task,
+          Compensation,
+          SalaryDeduction,
+          SalaryBonus,
+          SalaryHistory,
+        ],
+        migrations: [`${rootDir}/database/migrations/*.${extension}`],
+        migrationsTableName: 'migrations',
+        synchronize: false,
+        logging: process.env.NODE_ENV === 'development',
+      }
+    : {
+        type: 'postgres',
+        host: process.env.DATABASE_HOST ?? process.env.HOST ?? 'localhost',
+        port: Number(process.env.DATABASE_PORT ?? 5432),
+        username: process.env.DATABASE_USERNAME,
+        password: process.env.DATABASE_PASSWORD ?? process.env.PASSWORD,
+        database: process.env.DATABASE_NAME ?? process.env.DATABASE,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        entities: [
+          User,
+          Employee,
+          Department,
+          Attendance,
+          LeaveRequest,
+          PerformanceReview,
+          Notification,
+          AuditLog,
+          Task,
+          Compensation,
+          SalaryDeduction,
+          SalaryBonus,
+          SalaryHistory,
+        ],
+        migrations: [`${rootDir}/database/migrations/*.${extension}`],
+        migrationsTableName: 'migrations',
+        synchronize: false,
+        logging: process.env.NODE_ENV === 'development',
+      },
+);
