@@ -551,6 +551,102 @@ export class AdminService {
     return this.sanitizeWithRelations(updated.id);
   }
 
+  /**
+   * Promotes an existing EMPLOYEE to MANAGER in place. The User and Employee
+   * rows are preserved (no duplicate account is created); only the role and the
+   * employee position are updated. Active sessions are revoked and the token
+   * version bumped so the new role takes effect on next login.
+   */
+  async makeManager(employeeId: string, adminId: string): Promise<SafeUser> {
+    const employee = await this.employeeRepository.findOne({
+      where: { id: employeeId },
+      relations: ['user', 'department'],
+    });
+    if (!employee) {
+      throw new NotFoundException(ERROR_MESSAGES.EMPLOYEE_NOT_FOUND);
+    }
+    if (!employee.user) {
+      throw new NotFoundException(ERROR_MESSAGES.USER_NOT_FOUND);
+    }
+    if (!employee.isActive) {
+      throw new BadRequestException('Cannot promote an inactive employee');
+    }
+    if (
+      employee.role !== Role.employee &&
+      employee.user.role !== Role.employee
+    ) {
+      throw new BadRequestException('Target is not an employee');
+    }
+    if (adminId === String(employee.user.id)) {
+      throw new ForbiddenException('You cannot promote your own account');
+    }
+
+    const previousRole = employee.user.role;
+    employee.user.role = Role.manager;
+    employee.role = Role.manager;
+    employee.position = employee.position || 'Manager';
+
+    await this.sessionService.revokeAllSessions(String(employee.user.id));
+    employee.user.tokenVersion += 1;
+
+    const user = await this.userRepository.manager.transaction(
+      async (manager: EntityManager) => {
+        const savedUser = await manager.save(User, employee.user);
+        await manager.save(Employee, employee);
+        return savedUser;
+      },
+    );
+
+    await this.cacheInvalidation.onEmployeeChanged(employee.id, user.id);
+    await this.cacheInvalidation.invalidateAdminDashboard();
+    await this.cacheInvalidation.invalidateAdminUsers();
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId: user.id,
+      action: AuditAction.EMPLOYEE_PROMOTED_TO_MANAGER,
+      entity: 'User',
+      entityId: String(user.id),
+      description: 'Administrator promoted an employee to manager',
+      oldValues: { role: previousRole },
+      newValues: { role: Role.manager },
+    });
+
+    await this.notify(
+      String(user.id),
+      'Promoted to manager',
+      'Your account has been promoted to manager by an administrator.',
+    );
+
+    return this.sanitizeWithRelations(user.id);
+  }
+
+  /**
+   * Idempotent bootstrap of the very first administrator. Reads credentials
+   * from the environment; the password is hashed by createAccount and never
+   * returned or logged. If any administrator already exists the method is a
+   * no-op, so it is safe to call on every application start.
+   */
+  async ensureInitialAdmin(email: string, password: string): Promise<void> {
+    const existingAdmin = await this.userRepository.findOne({
+      where: { role: Role.admin },
+    });
+    if (existingAdmin) {
+      return;
+    }
+
+    await this.createAccount({
+      firstName: 'System',
+      lastName: 'Administrator',
+      email,
+      password,
+      country: '',
+      city: '',
+      phoneNumber: '',
+      nationalId: '',
+      role: Role.admin,
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Sessions
   // ---------------------------------------------------------------------------

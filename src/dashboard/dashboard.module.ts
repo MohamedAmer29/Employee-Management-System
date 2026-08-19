@@ -12,6 +12,7 @@ import { Notification } from '@/notifications/notification.entity';
 import { AuditLog } from '@/audit-logs/audit-log.entity';
 import { Department } from '@/department/entities/department.entity';
 import { User } from '@/users/entities/user.entity';
+import { Compensation } from '@/payroll/entities/compensation.entity';
 import { DashboardCacheListener } from './dashboard-cache.listener';
 
 @Module({
@@ -25,6 +26,7 @@ import { DashboardCacheListener } from './dashboard-cache.listener';
       AuditLog,
       Department,
       User,
+      Compensation,
     ]),
   ],
   controllers: [DashboardController, AdminAttendanceController],

@@ -41,7 +41,7 @@ export function configureApp(app: INestApplication): void {
     origin: 'http://localhost:5173',
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'reset-token'],
   });
 
   const config = new DocumentBuilder()

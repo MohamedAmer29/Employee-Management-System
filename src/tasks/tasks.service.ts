@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -65,7 +70,7 @@ export class TasksService {
     }
 
     const actor = await this.getActor(currentUserId, role);
-    const assigneeId = hasEmployee ? employeeId! : managerId!;
+    const assigneeId = hasEmployee ? employeeId : managerId!;
 
     const assignee = await this.employeeRepository.findOne({
       where: { id: assigneeId },
@@ -139,7 +144,10 @@ export class TasksService {
     query: TaskQueryDto,
     role: Role,
     currentUserId: string,
-  ): Promise<{ data: Record<string, unknown>[]; pagination: Record<string, unknown> }> {
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: Record<string, unknown>;
+  }> {
     if (role === Role.employee) {
       throw new ForbiddenException(ERROR_MESSAGES.FORBIDDEN);
     }
@@ -307,8 +315,10 @@ export class TasksService {
 
     const saved = await this.taskRepository.save(task);
     let action = AuditAction.TASK_UPDATED;
-    if (dto.status === TaskStatus.COMPLETED) action = AuditAction.TASK_COMPLETED;
-    if (dto.status === TaskStatus.CANCELLED) action = AuditAction.TASK_CANCELLED;
+    if (dto.status === TaskStatus.COMPLETED)
+      action = AuditAction.TASK_COMPLETED;
+    if (dto.status === TaskStatus.CANCELLED)
+      action = AuditAction.TASK_CANCELLED;
     this.eventEmitter.emit('audit.log.created', {
       userId: currentUserId,
       action,
@@ -386,10 +396,7 @@ export class TasksService {
     return task;
   }
 
-  private async getActor(
-    userId: string,
-    role: Role,
-  ): Promise<Actor> {
+  private async getActor(userId: string, role: Role): Promise<Actor> {
     if (role === Role.admin) {
       return {};
     }
@@ -417,8 +424,10 @@ export class TasksService {
     }
     const isAssignee =
       !!actor.employee &&
-      (!!task.assignedEmployee && task.assignedEmployee.id === actor.employee.id ||
-        !!task.assignedManager && task.assignedManager.id === actor.employee.id);
+      ((!!task.assignedEmployee &&
+        task.assignedEmployee.id === actor.employee.id) ||
+        (!!task.assignedManager &&
+          task.assignedManager.id === actor.employee.id));
 
     if (role === Role.manager) {
       if (actor.departmentId && task.department?.id === actor.departmentId) {
@@ -438,10 +447,7 @@ export class TasksService {
     throw new ForbiddenException(ERROR_MESSAGES.FORBIDDEN);
   }
 
-  private async notifyAssignee(
-    assignee: Employee,
-    task: Task,
-  ): Promise<void> {
+  private async notifyAssignee(assignee: Employee, task: Task): Promise<void> {
     const userId = assignee.user?.id;
     if (!userId) {
       return;
@@ -497,7 +503,8 @@ export class TasksService {
       createdBy: task.createdBy
         ? {
             id: task.createdBy.id,
-            fullName: `${task.createdBy.firstName} ${task.createdBy.lastName}`.trim(),
+            fullName:
+              `${task.createdBy.firstName} ${task.createdBy.lastName}`.trim(),
           }
         : null,
     };

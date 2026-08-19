@@ -15,6 +15,7 @@ import {
 import { Employee } from '@/employees/entities/employee.entity';
 import { Attendance } from '@/attendance/entities/attendance.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
+import { Compensation } from '@/payroll/entities/compensation.entity';
 import { PerformanceReview } from '@/performance/entities/performance';
 import { Notification } from '@/notifications/notification.entity';
 import { AuditLog } from '@/audit-logs/audit-log.entity';
@@ -42,6 +43,7 @@ import {
   ManagerEmployeeStats,
   ManagerLeaveStats,
   ManagerPerformanceStats,
+  ManagerPayrollStats,
 } from './interfaces/manager-dashboard.interface';
 import {
   EmployeeDashboardData,
@@ -50,6 +52,8 @@ import {
   EmployeeLeaveStats,
   EmployeeNotificationStats,
   EmployeePerformanceStats,
+  EmployeePayrollStats,
+  EmployeePayrollEntry,
 } from './interfaces/employee-dashboard.interface';
 import { DashboardPeriod } from './enums/dashboard-period.enum';
 import { LeaveStatus } from '@/leave/interfaces/leave.status';
@@ -76,6 +80,8 @@ export class DashboardService {
     private readonly departmentRepository: Repository<Department>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Compensation)
+    private readonly compensationRepository: Repository<Compensation>,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
   ) {}
@@ -505,6 +511,7 @@ export class DashboardService {
       leave: leaveStats,
       pendingLeaves,
       performance: performanceStats,
+      payroll: await this.getManagerPayrollStats(departmentId),
       unreadNotifications,
       recentActivities,
     };
@@ -557,6 +564,7 @@ export class DashboardService {
       attendanceTrend,
       leave: leaveStats,
       performance: performanceStats,
+      payroll: await this.getEmployeePayrollStats(employee.id),
       notifications: notificationStats,
       recentActivities,
     };
@@ -1384,6 +1392,115 @@ export class DashboardService {
     return {
       unread,
       latest,
+    };
+  }
+
+  /**
+   * Aggregated payroll metrics for a manager's department. Always scoped to the
+   * manager's department (the departmentId comes from the JWT principal in the
+   * caller). Returns zeroed metrics when the manager has no department.
+   */
+  private async getManagerPayrollStats(
+    departmentId?: string,
+  ): Promise<ManagerPayrollStats> {
+    if (!departmentId) {
+      return {
+        totalEmployees: 0,
+        totalBaseSalary: 0,
+        totalDeductions: 0,
+        totalBonuses: 0,
+        totalNetSalary: 0,
+        pendingPayroll: 0,
+        approvedPayroll: 0,
+        paidPayroll: 0,
+      };
+    }
+
+    const row = await this.compensationRepository
+      .createQueryBuilder('comp')
+      .leftJoin('comp.employee', 'employee')
+      .select('COUNT(comp.id)', 'count')
+      .addSelect('COALESCE(SUM(comp.baseSalary), 0)', 'totalBaseSalary')
+      .addSelect('COALESCE(SUM(comp.totalDeductions), 0)', 'totalDeductions')
+      .addSelect('COALESCE(SUM(comp.totalBonuses), 0)', 'totalBonuses')
+      .addSelect('COALESCE(SUM(comp.netSalary), 0)', 'totalNetSalary')
+      .addSelect(
+        `COUNT(CASE WHEN comp.status = 'CALCULATED' THEN 1 END)`,
+        'pending',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN comp.status = 'APPROVED' THEN 1 END)`,
+        'approved',
+      )
+      .addSelect(`COUNT(CASE WHEN comp.status = 'PAID' THEN 1 END)`, 'paid')
+      .where('employee.departmentId = :departmentId', { departmentId })
+      .getRawOne<{
+        totalBaseSalary: string;
+        totalDeductions: string;
+        totalBonuses: string;
+        totalNetSalary: string;
+        pending: string;
+        approved: string;
+        paid: string;
+      }>();
+
+    const totalEmployees = await this.employeeRepository.count({
+      where: { department: { id: departmentId }, isActive: true },
+    });
+
+    return {
+      totalEmployees,
+      totalBaseSalary: Number(row?.totalBaseSalary) || 0,
+      totalDeductions: Number(row?.totalDeductions) || 0,
+      totalBonuses: Number(row?.totalBonuses) || 0,
+      totalNetSalary: Number(row?.totalNetSalary) || 0,
+      pendingPayroll: parseInt(row?.pending ?? '0', 10) || 0,
+      approvedPayroll: parseInt(row?.approved ?? '0', 10) || 0,
+      paidPayroll: parseInt(row?.paid ?? '0', 10) || 0,
+    };
+  }
+
+  /**
+   * Current-month payroll plus history for the authenticated employee.
+   */
+  private async getEmployeePayrollStats(
+    employeeId: string,
+  ): Promise<EmployeePayrollStats> {
+    const [year, month] = getBusinessDate().split('-').map(Number);
+
+    const [current, history] = await Promise.all([
+      this.compensationRepository.findOne({
+        where: { employee: { id: employeeId }, month, year },
+        relations: ['deductions', 'bonuses'],
+      }),
+      this.compensationRepository.find({
+        where: { employee: { id: employeeId } },
+        relations: ['deductions', 'bonuses'],
+        order: { year: 'DESC', month: 'DESC' },
+      }),
+    ]);
+
+    return {
+      currentMonth: current ? this.mapCompensation(current) : null,
+      history: history.map((comp) => this.mapCompensation(comp)),
+    };
+  }
+
+  private mapCompensation(comp: Compensation): EmployeePayrollEntry {
+    return {
+      id: comp.id,
+      month: comp.month,
+      year: comp.year,
+      baseSalary: comp.baseSalary,
+      workingDays: comp.workingDays,
+      attendedDays: comp.attendedDays,
+      absentDays: comp.absentDays,
+      leaveDays: comp.leaveDays,
+      attendanceDeduction: comp.attendanceDeduction,
+      totalDeductions: comp.totalDeductions,
+      bonuses: comp.totalBonuses,
+      netSalary: comp.netSalary,
+      status: comp.status,
     };
   }
 }

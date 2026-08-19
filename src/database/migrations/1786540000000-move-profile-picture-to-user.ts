@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * managers and employees are all rows in "user"). Existing employee pictures
  * are copied to the linked user row before the employee column is removed.
  */
-export class MoveProfilePictureToUser1786540000000
-  implements MigrationInterface
-{
+export class MoveProfilePictureToUser1786540000000 implements MigrationInterface {
   name = 'MoveProfilePictureToUser1786540000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

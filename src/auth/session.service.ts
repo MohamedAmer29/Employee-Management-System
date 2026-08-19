@@ -10,6 +10,7 @@ export interface CreateSessionInput {
   ttlSeconds: number;
   ipAddress?: string;
   userAgent?: string;
+  rememberMe?: boolean;
 }
 
 /**
@@ -44,6 +45,7 @@ export class SessionService {
       expiresAt: expiresAt.toISOString(),
       ipAddress,
       userAgent,
+      rememberMe: input.rememberMe,
     };
 
     await Promise.all([

@@ -22,4 +22,11 @@ export const OtpKeys = {
     `email-verification-attempts:${normalizeEmail(email)}`,
   rate: (email: string): string =>
     `email-verification-rate:${normalizeEmail(email)}`,
+  passwordResetOtp: (email: string): string =>
+    `password-reset-otp:${normalizeEmail(email)}`,
+  passwordResetAttempts: (email: string): string =>
+    `password-reset-attempts:${normalizeEmail(email)}`,
+  passwordResetRate: (email: string): string =>
+    `password-reset-rate:${normalizeEmail(email)}`,
+  resetToken: (jti: string): string => `password-reset-token:${jti}`,
 } as const;

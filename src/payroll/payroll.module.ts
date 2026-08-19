@@ -10,6 +10,8 @@ import { Attendance } from '@/attendance/entities/attendance.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
 import { PayrollService } from './payroll.service';
 import { PayrollController } from './payroll.controller';
+import { ManagerPayrollController } from './manager-payroll.controller';
+import { EmployeePayrollController } from './employee-payroll.controller';
 import { NotificationsModule } from '@/notifications/notifications.module';
 
 @Module({
@@ -26,7 +28,11 @@ import { NotificationsModule } from '@/notifications/notifications.module';
     ]),
     NotificationsModule,
   ],
-  controllers: [PayrollController],
+  controllers: [
+    PayrollController,
+    ManagerPayrollController,
+    EmployeePayrollController,
+  ],
   providers: [PayrollService],
   exports: [PayrollService],
 })

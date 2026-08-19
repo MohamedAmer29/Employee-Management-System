@@ -156,7 +156,9 @@ export class AdminAttendanceService {
     if (record.status) {
       return record.status;
     }
-    return record.isPresent ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT;
+    return record.isPresent
+      ? AttendanceStatus.PRESENT
+      : AttendanceStatus.ABSENT;
   }
 
   private getTimezone(): string {
@@ -333,7 +335,10 @@ export class AdminAttendanceService {
 
     // 4. Attendance rows for the whole month, for all selected employees, in a
     //    single query (no N+1). Keyed by employeeId -> date.
-    const attendanceByEmployee = new Map<string, Map<string, AttendanceStatusRow>>();
+    const attendanceByEmployee = new Map<
+      string,
+      Map<string, AttendanceStatusRow>
+    >();
     if (employeeIds.length > 0) {
       const rows = await this.attendanceRepository
         .createQueryBuilder('att')
@@ -366,10 +371,10 @@ export class AdminAttendanceService {
     const leaveByEmployee = new Map<string, Map<string, string | null>>();
     const leaveRows = await this.leaveRepository
       .createQueryBuilder('leave')
-        .select('leave."employeeId"', 'employeeId')
-        .addSelect("TO_CHAR(leave.startDate, 'YYYY-MM-DD')", 'startDate')
-        .addSelect("TO_CHAR(leave.endDate, 'YYYY-MM-DD')", 'endDate')
-        .addSelect('leave.reason', 'reason')
+      .select('leave."employeeId"', 'employeeId')
+      .addSelect("TO_CHAR(leave.startDate, 'YYYY-MM-DD')", 'startDate')
+      .addSelect("TO_CHAR(leave.endDate, 'YYYY-MM-DD')", 'endDate')
+      .addSelect('leave.reason', 'reason')
       .where('leave.status = :status', { status: LeaveStatus.APPROVED })
       .andWhere('leave.startDate <= :end', { end: endDate })
       .andWhere('leave.endDate >= :start', { start: startDate })
@@ -379,15 +384,15 @@ export class AdminAttendanceService {
         endDate: string;
         reason: string | null;
       }>();
-      for (const leave of leaveRows) {
-        if (!leave.employeeId) {
-          continue;
-        }
-        const key = String(leave.employeeId);
-        if (!leaveByEmployee.has(key)) {
-          leaveByEmployee.set(key, new Map());
-        }
-        const dateMap = leaveByEmployee.get(key)!;
+    for (const leave of leaveRows) {
+      if (!leave.employeeId) {
+        continue;
+      }
+      const key = String(leave.employeeId);
+      if (!leaveByEmployee.has(key)) {
+        leaveByEmployee.set(key, new Map());
+      }
+      const dateMap = leaveByEmployee.get(key)!;
       for (const date of monthDates) {
         if (date >= leave.startDate && date <= leave.endDate) {
           if (!dateMap.has(date)) {
@@ -406,10 +411,8 @@ export class AdminAttendanceService {
     let companyWorkingDays = 0;
 
     for (const employee of employees) {
-      const attMap =
-        attendanceByEmployee.get(String(employee.id)) ?? new Map();
-      const leaveMap =
-        leaveByEmployee.get(String(employee.id)) ?? new Map();
+      const attMap = attendanceByEmployee.get(String(employee.id)) ?? new Map();
+      const leaveMap = leaveByEmployee.get(String(employee.id)) ?? new Map();
       const attendance: MonthlyAttendanceDay[] = [];
       let present = 0;
       let absent = 0;
@@ -688,7 +691,10 @@ export class AdminAttendanceService {
       }
 
       return {
-        id: uuidv5(`${employee.id}:${date}`, AdminAttendanceService.ATTENDANCE_ROW_NAMESPACE),
+        id: uuidv5(
+          `${employee.id}:${date}`,
+          AdminAttendanceService.ATTENDANCE_ROW_NAMESPACE,
+        ),
         employeeId: employee.id,
         employeeName: employee.fullName,
         department,
@@ -704,7 +710,9 @@ export class AdminAttendanceService {
     const onTime = present - late;
     const totalExpected = employees.length - onLeave;
     const attendanceRate =
-      totalExpected > 0 ? Number(((present / totalExpected) * 100).toFixed(1)) : 0;
+      totalExpected > 0
+        ? Number(((present / totalExpected) * 100).toFixed(1))
+        : 0;
 
     const departments = Array.from(deptMap.values()).map((d) => ({
       ...d,
@@ -741,7 +749,9 @@ export class AdminAttendanceService {
       .leftJoin('employee.user', 'user');
 
     if (query.employeeId) {
-      qb.andWhere('employee.id = :employeeId', { employeeId: query.employeeId });
+      qb.andWhere('employee.id = :employeeId', {
+        employeeId: query.employeeId,
+      });
     }
     if (query.departmentId) {
       qb.andWhere('department.id = :departmentId', {
@@ -809,7 +819,9 @@ export class AdminAttendanceService {
     return this.paginate(qb, query.page ?? 1, query.limit ?? 10);
   }
 
-  async getAbsent(query: AdminAttendanceQueryDto): Promise<AdminAttendancePage> {
+  async getAbsent(
+    query: AdminAttendanceQueryDto,
+  ): Promise<AdminAttendancePage> {
     const tz = this.getTimezone();
     const today = this.getBusinessDate();
 
@@ -925,8 +937,7 @@ export class AdminAttendanceService {
     // (matching the source-of-truth derivation used by the summary endpoints).
     const items: AdminAttendanceItem[] = [];
     for (const employee of employees) {
-      const attMap =
-        attendanceByEmployee.get(String(employee.id)) ?? new Map();
+      const attMap = attendanceByEmployee.get(String(employee.id)) ?? new Map();
       const leaveSet = leaveByEmployee.get(String(employee.id)) ?? new Set();
       for (const date of dates) {
         const att = attMap.get(date);
@@ -1087,9 +1098,7 @@ export class AdminAttendanceService {
 
     const workingDays = this.countWorkingDaysUpTo(this.getBusinessDate());
     const attendanceRate =
-      workingDays > 0
-        ? Number(((present / workingDays) * 100).toFixed(1))
-        : 0;
+      workingDays > 0 ? Number(((present / workingDays) * 100).toFixed(1)) : 0;
 
     return {
       employeeId: employee.id,

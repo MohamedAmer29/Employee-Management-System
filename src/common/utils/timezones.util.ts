@@ -20,8 +20,9 @@ const WEEKDAY_MAP: Record<string, number> = {
  */
 export function getTimezone(config?: ConfigService): string {
   const raw = config
-    ? config.get<string>('ATTENDANCE_TIMEZONE')
-    : process.env.ATTENDANCE_TIMEZONE;
+    ? (config.get<string>('APP_TIMEZONE') ??
+      config.get<string>('ATTENDANCE_TIMEZONE'))
+    : (process.env.APP_TIMEZONE ?? process.env.ATTENDANCE_TIMEZONE);
   return raw ?? DEFAULT_TIMEZONE;
 }
 

@@ -45,7 +45,11 @@ export class PayrollQueryDto {
   @IsInt()
   year?: number;
 
-  @ApiProperty({ required: false, description: 'Filter by status', enum: PayrollStatus })
+  @ApiProperty({
+    required: false,
+    description: 'Filter by status',
+    enum: PayrollStatus,
+  })
   @IsOptional()
   @IsEnum(PayrollStatus)
   status?: PayrollStatus;
@@ -62,7 +66,10 @@ export class PayrollQueryDto {
   @IsNumberString()
   managerId?: string;
 
-  @ApiProperty({ required: false, description: 'Search by employee/manager name' })
+  @ApiProperty({
+    required: false,
+    description: 'Search by employee/manager name',
+  })
   @IsOptional()
   @IsString()
   search?: string;

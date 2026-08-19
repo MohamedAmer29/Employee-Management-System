@@ -23,6 +23,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { OtpModule } from './otp/otp.module';
+import { AdminBootstrapService } from './admin/admin-bootstrap.service';
 import { validateEnv } from './config/env.validation';
 
 @Module({
@@ -57,5 +58,6 @@ import { validateEnv } from './config/env.validation';
     DashboardModule,
     HealthModule,
   ],
+  providers: [AdminBootstrapService],
 })
 export class AppModule {}

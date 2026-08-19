@@ -48,12 +48,34 @@ export interface EmployeeNotificationStats {
   latest: any[];
 }
 
+export interface EmployeePayrollEntry {
+  id: string;
+  month: number;
+  year: number;
+  baseSalary: number;
+  workingDays: number;
+  attendedDays: number;
+  absentDays: number;
+  leaveDays: number;
+  attendanceDeduction: number;
+  totalDeductions: number;
+  bonuses: number;
+  netSalary: number;
+  status: string;
+}
+
+export interface EmployeePayrollStats {
+  currentMonth: EmployeePayrollEntry | null;
+  history: EmployeePayrollEntry[];
+}
+
 export interface EmployeeDashboardData {
   employee: EmployeeInfo;
   attendance: EmployeeAttendanceStats;
   attendanceTrend: AttendanceTrend[];
   leave: EmployeeLeaveStats;
   performance: EmployeePerformanceStats;
+  payroll: EmployeePayrollStats;
   notifications: EmployeeNotificationStats;
   recentActivities: RecentActivity[];
 }

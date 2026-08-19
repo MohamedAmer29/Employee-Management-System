@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { Role } from '../auth/interfaces/Role.enum';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -42,7 +44,7 @@ export class UsersService {
       nationalId: dto.nationalId,
       username: dto.username,
       password: hashedPassword,
-      role: dto.role,
+      role: Role.employee,
     });
 
     const saved = await this.userRepository.save(user);
@@ -80,7 +82,17 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto) {
     const user = await this.findOne(id);
 
+    // A privilege change must invalidate existing tokens so the new role is
+    // only picked up after the user re-authenticates (reuses tokenVersion).
+    const roleChanging =
+      dto.role !== undefined && dto.role !== user.role;
+
     Object.assign(user, dto as any);
+
+    if (roleChanging) {
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
+
     return this.userRepository.save(user);
   }
 
@@ -124,6 +136,9 @@ export class UsersService {
     const user = await this.findOne(id);
 
     user.isActive = false;
+    // Bump the token version so any issued access/refresh tokens are rejected
+    // immediately (JwtStrategy + refresh-token both check tokenVersion).
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     const saved = await this.userRepository.save(user);
     this.eventEmitter.emit('user.changed');
     return saved;
@@ -133,6 +148,8 @@ export class UsersService {
     const user = await this.findOne(id);
 
     user.isActive = true;
+    // Force existing tokens to be re-issued after a reactivation.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     const saved = await this.userRepository.save(user);
     this.eventEmitter.emit('user.changed');
     return saved;
@@ -160,6 +177,13 @@ export class UsersService {
     user.profilePicture = profilePicture;
     const saved = await this.userRepository.save(user);
     this.eventEmitter.emit('user.changed');
+    this.eventEmitter.emit('audit.log.created', {
+      userId,
+      action: AuditAction.PROFILE_IMAGE_UPDATED,
+      entity: 'User',
+      entityId: String(userId),
+      description: 'User updated their profile picture',
+    });
 
     return this.sanitizeUser(saved);
   }

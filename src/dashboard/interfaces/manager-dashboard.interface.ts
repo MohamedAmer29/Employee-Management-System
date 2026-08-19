@@ -44,6 +44,17 @@ export interface ManagerPerformanceStats {
   latestReview: ManagerLatestReview | null;
 }
 
+export interface ManagerPayrollStats {
+  totalEmployees: number;
+  totalBaseSalary: number;
+  totalDeductions: number;
+  totalBonuses: number;
+  totalNetSalary: number;
+  pendingPayroll: number;
+  approvedPayroll: number;
+  paidPayroll: number;
+}
+
 export interface ManagerDashboardData {
   department: ManagerDepartmentInfo;
   employees: ManagerEmployeeStats;
@@ -52,6 +63,7 @@ export interface ManagerDashboardData {
   leave: ManagerLeaveStats;
   pendingLeaves: PendingLeaveRequest[];
   performance: ManagerPerformanceStats;
+  payroll: ManagerPayrollStats;
   unreadNotifications: number;
   recentActivities: any[];
 }

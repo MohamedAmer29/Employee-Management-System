@@ -49,13 +49,19 @@ export class TaskQueryDto {
   @IsEnum(TaskPriority)
   priority?: TaskPriority;
 
-  @ApiProperty({ required: false, description: 'Filter by assigned employee id' })
+  @ApiProperty({
+    required: false,
+    description: 'Filter by assigned employee id',
+  })
   @IsOptional()
   @Transform(toIdString)
   @IsNumberString()
   employeeId?: string;
 
-  @ApiProperty({ required: false, description: 'Filter by assigned manager id' })
+  @ApiProperty({
+    required: false,
+    description: 'Filter by assigned manager id',
+  })
   @IsOptional()
   @Transform(toIdString)
   @IsNumberString()

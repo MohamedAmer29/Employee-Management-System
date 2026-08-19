@@ -118,7 +118,10 @@ export class OtpService {
       return OtpVerificationResult.EXPIRED;
     }
 
-    const attempts = await this.getFailedAttempts(email);
+    const attempts = await this.getFailedAttempts(
+      OtpKeys.attempts(email),
+      OtpKeys.otp(email),
+    );
 
     if (attempts >= OTP_DEFAULTS.MAX_FAILED_ATTEMPTS) {
       await this.clearOtp(email);
@@ -154,6 +157,84 @@ export class OtpService {
   }
 
   /**
+   * Generates a password-reset OTP stored under a namespace separate from the
+   * email-verification flow so the two never collide or overwrite each other.
+   */
+  async issuePasswordResetOtp(email: string): Promise<OtpIssueResult> {
+    const otp = this.generateOtp();
+    const expiresInSeconds = this.getPasswordResetExpiresInSeconds();
+
+    await this.redisService.set(
+      OtpKeys.passwordResetOtp(email),
+      this.hashOtp(email, otp),
+      expiresInSeconds,
+    );
+    await this.redisService.delete(OtpKeys.passwordResetAttempts(email));
+
+    return { otp, expiresInSeconds };
+  }
+
+  async verifyPasswordResetOtp(
+    email: string,
+    submittedOtp: string,
+  ): Promise<OtpVerificationResult> {
+    const storedHash = await this.redisService.get(
+      OtpKeys.passwordResetOtp(email),
+    );
+
+    if (storedHash === null) {
+      return OtpVerificationResult.EXPIRED;
+    }
+
+    const attempts = await this.getFailedAttempts(
+      OtpKeys.passwordResetAttempts(email),
+      OtpKeys.passwordResetOtp(email),
+    );
+
+    if (attempts >= OTP_DEFAULTS.MAX_FAILED_ATTEMPTS) {
+      await this.clearPasswordResetOtp(email);
+      return OtpVerificationResult.TOO_MANY_ATTEMPTS;
+    }
+
+    if (!this.matches(email, submittedOtp, storedHash)) {
+      const updated = await this.redisService.incrementWithTtl(
+        OtpKeys.passwordResetAttempts(email),
+        this.getPasswordResetExpiresInSeconds(),
+      );
+
+      if (
+        updated !== null &&
+        updated.count >= OTP_DEFAULTS.MAX_FAILED_ATTEMPTS
+      ) {
+        await this.redisService.delete(OtpKeys.passwordResetOtp(email));
+        return OtpVerificationResult.TOO_MANY_ATTEMPTS;
+      }
+
+      return OtpVerificationResult.INVALID;
+    }
+
+    return OtpVerificationResult.VALID;
+  }
+
+  async clearPasswordResetOtp(email: string): Promise<void> {
+    await this.redisService.delete(
+      OtpKeys.passwordResetOtp(email),
+      OtpKeys.passwordResetAttempts(email),
+    );
+  }
+
+  getPasswordResetExpiresInSeconds(): number {
+    const configured = Number(
+      this.configService.get<string>('PASSWORD_RESET_OTP_EXPIRES_IN') ??
+        this.getExpiresInSeconds(),
+    );
+
+    return Number.isNaN(configured) || configured <= 0
+      ? this.getExpiresInSeconds()
+      : configured;
+  }
+
+  /**
    * Resend rate limiting, e.g. max 3 requests per 15 minutes per email.
    * Returns false when the caller has exceeded the allowance.
    *
@@ -178,8 +259,11 @@ export class OtpService {
     await this.redisService.delete(OtpKeys.rate(email));
   }
 
-  private async getFailedAttempts(email: string): Promise<number> {
-    const raw = await this.redisService.get(OtpKeys.attempts(email));
+  private async getFailedAttempts(
+    attemptsKey: string,
+    otpKey: string,
+  ): Promise<number> {
+    const raw = await this.redisService.get(attemptsKey);
 
     if (raw === null) {
       return 0;

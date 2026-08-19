@@ -12,6 +12,7 @@ import { Employee } from '../employees/entities/employee.entity';
 import { LeaveRequest } from '@/leave/entities/leave.entity';
 import { LeaveStatus } from '@/leave/interfaces/leave.status';
 import { AttendanceStatus } from '@/common/constants/enums';
+import { Role } from '@/auth/interfaces/Role.enum';
 import { EmployeesService } from '../employees/employees.service';
 import { UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -71,9 +72,7 @@ export class AttendanceService {
     const today = this.getTodayDate();
 
     if (this.getCurrentBusinessHour() >= 12) {
-      throw new BadRequestException(
-        'Check-in is not allowed after 12:00 PM',
-      );
+      throw new BadRequestException('Check-in is not allowed after 12:00 PM');
     }
 
     const existing = await this.attendanceRepository.findOne({
@@ -399,7 +398,9 @@ export class AttendanceService {
     if (record.status) {
       return record.status;
     }
-    return record.isPresent ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT;
+    return record.isPresent
+      ? AttendanceStatus.PRESENT
+      : AttendanceStatus.ABSENT;
   }
 
   private calculateWorkedHours(checkIn: string, checkOut: string) {
@@ -439,13 +440,43 @@ export class AttendanceService {
     return this.attendanceRepository.manager.transaction(async (manager) => {
       const activeEmployees = await manager.getRepository(Employee).find({
         where: { isActive: true },
-        select: ['id'],
+        select: ['id', 'role'],
       });
       const activeIds = activeEmployees.map((employee) => employee.id);
       const totalActive = activeIds.length;
 
+      // Admins are never marked absent: they are always considered present for
+      // the day. We ensure a PRESENT attendance record exists (without
+      // overwriting a manual check-in) and exclude them from the absence logic.
+      const adminIds = activeEmployees
+        .filter((employee) => employee.role === Role.admin)
+        .map((employee) => employee.id);
+      const nonAdminIds = activeIds.filter((id) => !adminIds.includes(id));
+
+      let markedAdminPresent = 0;
+      if (adminIds.length > 0) {
+        const placeholders = adminIds
+          .map(
+            (_, index) =>
+              `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`,
+          )
+          .join(', ');
+        const parameters: unknown[] = [];
+        adminIds.forEach((id) => {
+          parameters.push(id, date, true, AttendanceStatus.PRESENT);
+        });
+
+        const result = await manager.query(
+          `INSERT INTO "attendance" ("employeeId", "date", "isPresent", "status")
+           VALUES ${placeholders}
+           ON CONFLICT ("employeeId", "date") DO NOTHING`,
+          parameters,
+        );
+        markedAdminPresent = result?.rowCount ?? adminIds.length;
+      }
+
       if (totalActive === 0) {
-        this.emitAutoAbsentAudit(date, 0, 0, 0);
+        this.emitAutoAbsentAudit(date, 0, 0, 0, markedAdminPresent);
         return { date, totalActive: 0, alreadyAttended: 0, markedAbsent: 0 };
       }
 
@@ -453,12 +484,12 @@ export class AttendanceService {
         .createQueryBuilder(Attendance, 'att')
         .select('att."employeeId"', 'employeeId')
         .where('att.date = :date', { date })
-        .andWhere('att.employeeId IN (:...ids)', { ids: activeIds })
+        .andWhere('att.employeeId IN (:...ids)', { ids: nonAdminIds })
         .getRawMany<{ employeeId: string }>();
 
       const attendedIds = new Set(attendedRows.map((row) => row.employeeId));
       const alreadyAttended = attendedIds.size;
-      const missingIds = activeIds.filter((id) => !attendedIds.has(id));
+      const missingIds = nonAdminIds.filter((id) => !attendedIds.has(id));
       const markedAbsent = missingIds.length;
 
       // Employees on approved leave that overlaps `date` become ON_LEAVE
@@ -480,7 +511,10 @@ export class AttendanceService {
         // re-run (or a concurrent instance that slipped past the lock) can
         // never create duplicates.
         const placeholders = missingIds
-          .map((_, index) => `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`)
+          .map(
+            (_, index) =>
+              `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`,
+          )
           .join(', ');
         const parameters: unknown[] = [];
         missingIds.forEach((id) => {
@@ -503,6 +537,7 @@ export class AttendanceService {
         totalActive,
         alreadyAttended,
         markedAbsent,
+        markedAdminPresent,
       );
 
       return { date, totalActive, alreadyAttended, markedAbsent };
@@ -514,13 +549,14 @@ export class AttendanceService {
     totalActive: number,
     alreadyAttended: number,
     markedAbsent: number,
+    markedAdminPresent = 0,
   ): void {
     this.eventEmitter.emit('audit.log.created', {
       userId: undefined,
       action: AuditAction.AUTO_MARK_ABSENT,
       entity: 'Attendance',
       entityId: date,
-      description: `Automatic absence assignment for ${date}: ${markedAbsent} employee(s) marked absent out of ${totalActive} active (${alreadyAttended} already attended).`,
+      description: `Automatic absence assignment for ${date}: ${markedAbsent} employee(s) marked absent out of ${totalActive} active (${alreadyAttended} already attended, ${markedAdminPresent} admin(s) ensured present).`,
     });
   }
 }

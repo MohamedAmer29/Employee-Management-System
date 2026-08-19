@@ -13,6 +13,8 @@ import { LoginProtectionService } from './login-protection.service';
 import { EmailVerificationService } from './email-verification.service';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { OtpModule } from '../otp/otp.module';
+import { MailModule } from '../mail/mail.module';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { OtpModule } from '../otp/otp.module';
       }),
     }),
     OtpModule,
+    MailModule,
+    CloudinaryModule,
   ],
   controllers: [AuthController],
   providers: [

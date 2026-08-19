@@ -2,15 +2,22 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiHeader,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -21,8 +28,12 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyTokenDto } from './dto/verify-token.dto';
 import { SendVerificationOtpDto } from './dto/send-verification-otp.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyResetOtpDto } from './dto/verify-reset-otp.dto';
 import type { Request, Response } from 'express';
 import { JwtGuard } from './guards/jwt.gaurd';
+import type { ProfileImageFile } from './auth.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { RateLimit } from '../common/decorators/rate-limit.decorator';
@@ -41,10 +52,48 @@ export class AuthController {
     limit: RATE_LIMIT_DEFAULTS.REGISTER_MAX_ATTEMPTS,
     windowSeconds: RATE_LIMIT_DEFAULTS.REGISTER_WINDOW_SECONDS,
   })
+  @UseInterceptors(FileInterceptor('profilePicture'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description:
+      'Registration payload. All fields are required except profilePicture, which is optional.',
+    schema: {
+      type: 'object',
+      properties: {
+        firstName: { type: 'string', example: 'Mohamed' },
+        lastName: { type: 'string', example: 'Amer' },
+        country: { type: 'string', example: 'Egypt' },
+        city: { type: 'string', example: 'Cairo' },
+        phoneNumber: { type: 'string', example: '+201234567890' },
+        nationalId: { type: 'string', example: '12345678901234' },
+        username: {
+          type: 'string',
+          description: 'Email address used as the login/username',
+          example: 'mohamed@gmail.com',
+        },
+        password: { type: 'string', example: 'Mohamed1@' },
+        profilePicture: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional profile image (JPEG/PNG/WEBP, max 2 MB)',
+        },
+      },
+      required: [
+        'firstName',
+        'lastName',
+        'country',
+        'city',
+        'phoneNumber',
+        'nationalId',
+        'username',
+        'password',
+      ],
+    },
+  })
   @ApiOperation({
     summary: 'Register a new account',
     description:
-      'Creates the account with isEmailVerified=false and emails a verification code. No access token is issued until the email is verified.',
+      'Creates the account with role=EMPLOYEE (the role is always assigned by the server and can never be chosen by the client). Emails a verification code. No access token is issued here - after verifying the email via POST /auth/verify-email the account is signed in and receives an access token. A profile image may be uploaded but is optional.',
   })
   @ApiResponse({
     status: 201,
@@ -52,8 +101,19 @@ export class AuthController {
     schema: {
       example: {
         success: true,
+        statusCode: 201,
         message:
           'Registration successful. Please check your email to verify your account.',
+        data: {
+          user: {
+            id: '1',
+            firstName: 'Mohamed',
+            lastName: 'Amer',
+            username: 'mohamed@gmail.com',
+            role: 'Employee',
+            profilePicture: null,
+          },
+        },
       },
     },
   })
@@ -71,8 +131,12 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 429, description: 'Too many requests' })
-  register(@Body() dto: RegisterDto, @Req() req: Request) {
-    return this.authService.register(dto, req);
+  register(
+    @Body() dto: RegisterDto,
+    @Req() req: Request,
+    @UploadedFile() file?: ProfileImageFile,
+  ) {
+    return this.authService.register(dto, req, file);
   }
 
   @Post('login')
@@ -111,6 +175,7 @@ export class AuthController {
     const result = await this.authService.login(
       dto.username,
       dto.password,
+      dto.rememberMe ?? false,
       res,
       req,
     );
@@ -249,9 +314,25 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Email verified successfully',
+    description:
+      'Email verified successfully. The account is now signed in and receives an access token.',
     schema: {
-      example: { success: true, message: 'Email verified successfully' },
+      example: {
+        success: true,
+        message: 'Email verified successfully. You are now signed in.',
+        data: {
+          user: {
+            id: '1',
+            firstName: 'Mohamed',
+            lastName: 'Amer',
+            username: 'mohamed@gmail.com',
+            role: 'Employee',
+            profilePicture: null,
+            isEmailVerified: true,
+          },
+          accessToken: 'jwt...',
+        },
+      },
     },
   })
   @ApiResponse({
@@ -315,8 +396,114 @@ export class AuthController {
       },
     },
   })
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto.email, dto.otp);
+  verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.verifyEmail(dto.email, dto.otp, req, res);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({
+    scope: 'auth:forgot-password',
+    limit: 100,
+    windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
+    trackBodyField: 'email',
+  })
+  @ApiOperation({
+    summary: 'Request a password reset OTP',
+    description:
+      'Generates a password-reset OTP, stores it securely with an expiry and emails it. The response is identical whether or not the account exists to prevent user enumeration.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Request accepted',
+    schema: {
+      example: {
+        success: true,
+        message:
+          'If the account exists, a password reset code has been sent to your email.',
+      },
+    },
+  })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    return this.authService.forgotPassword(dto.email, req);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({
+    scope: 'auth:reset-password',
+    limit: 100,
+    windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
+  })
+  @ApiOperation({
+    summary: 'Reset a password using a reset token',
+    description:
+      'Expects the reset token issued by POST /auth/verify-reset-otp in the "reset-token" header, plus the new password and its confirmation in the body. The token is single-use and short-lived, so the OTP is never sent to this endpoint.',
+  })
+  @ApiHeader({
+    name: 'reset-token',
+    description:
+      'Single-use reset token returned by POST /auth/verify-reset-otp',
+    required: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successful',
+    schema: { example: { success: true, message: 'Password has been reset' } },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid/expired/used reset token, mismatched passwords or weak password',
+  })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  resetPassword(
+    @Headers('reset-token') resetToken: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    return this.authService.resetPassword(
+      resetToken,
+      dto.password,
+      dto.confirmPassword,
+    );
+  }
+
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({
+    scope: 'auth:verify-reset-otp',
+    limit: 100,
+    windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
+    trackBodyField: 'email',
+  })
+  @ApiOperation({
+    summary: 'Check a password-reset OTP',
+    description:
+      'Validates the reset code without consuming it, so the client can confirm the code before asking for the new password. A successful check keeps the code valid for the subsequent reset-password call.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP validity result',
+    schema: {
+      example: {
+        success: true,
+        valid: true,
+        message: 'OTP is valid',
+        resetToken: 'jwt...',
+      },
+    },
+  })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  verifyResetOtp(@Body() dto: VerifyResetOtpDto) {
+    return this.authService.checkResetPasswordOtp(dto.email, dto.otp);
   }
 
   @Post('verify-token')

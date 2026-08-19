@@ -2,6 +2,7 @@ export const MAIL_TRANSPORTER = Symbol('MAIL_TRANSPORTER');
 
 export const MAIL_SUBJECTS = {
   EMAIL_VERIFICATION: 'Verify your EMS account',
+  PASSWORD_RESET: 'Reset your EMS password',
 } as const;
 
 export const MAIL_DEFAULTS = {

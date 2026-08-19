@@ -10,6 +10,10 @@ import {
   buildEmailVerificationHtml,
   buildEmailVerificationText,
 } from './templates/email-verification.template';
+import {
+  buildPasswordResetHtml,
+  buildPasswordResetText,
+} from './templates/password-reset.template';
 import { getMailConfig } from '../config/mail.config';
 
 /**
@@ -50,6 +54,22 @@ export class MailService implements OnModuleDestroy {
       subject: MAIL_SUBJECTS.EMAIL_VERIFICATION,
       html: buildEmailVerificationHtml(templateData),
       text: buildEmailVerificationText(templateData),
+    });
+  }
+
+  async sendPasswordResetOtp(
+    email: string,
+    otp: string,
+    expiresInMinutes: number,
+    recipientName?: string,
+  ): Promise<void> {
+    const templateData = { otp, expiresInMinutes, recipientName };
+
+    await this.send({
+      to: email,
+      subject: MAIL_SUBJECTS.PASSWORD_RESET,
+      html: buildPasswordResetHtml(templateData),
+      text: buildPasswordResetText(templateData),
     });
   }
 

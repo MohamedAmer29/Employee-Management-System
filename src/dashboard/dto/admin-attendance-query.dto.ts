@@ -15,14 +15,23 @@ import { toIdString } from '@/common/transforms/id-string.transform';
 import { AttendanceStatus } from '@/common/constants/enums';
 
 export class MonthlyAttendanceQueryDto {
-  @ApiProperty({ required: true, description: 'Month (1-12)', minimum: 1, maximum: 12 })
+  @ApiProperty({
+    required: true,
+    description: 'Month (1-12)',
+    minimum: 1,
+    maximum: 12,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(12)
   month!: number;
 
-  @ApiProperty({ required: true, description: 'Year (e.g. 2026)', minimum: 2000 })
+  @ApiProperty({
+    required: true,
+    description: 'Year (e.g. 2026)',
+    minimum: 2000,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(2000)
@@ -39,7 +48,10 @@ export class MonthlyAttendanceQueryDto {
   @IsString()
   employeeId?: string;
 
-  @ApiProperty({ required: false, description: 'Search by employee name or email' })
+  @ApiProperty({
+    required: false,
+    description: 'Search by employee name or email',
+  })
   @IsOptional()
   @IsString()
   search?: string;

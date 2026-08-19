@@ -15,6 +15,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { RegisterDto } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -24,7 +25,33 @@ import { LoginProtectionService } from './login-protection.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailNotVerifiedException } from '../common/exceptions/email-verification.exception';
 import { CacheInvalidationService } from '../redis/cache-invalidation.service';
+import { RedisService } from '../redis/redis.service';
 import { breakEmployeeUserCycle } from '../common/utils/break-employee-user-cycle';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { Role } from './interfaces/Role.enum';
+import { OtpVerificationResult } from '../otp/otp.service';
+import { OtpService } from '../otp/otp.service';
+import { OtpKeys } from '../otp/constants/otp.constants';
+import { MailService } from '../mail/mail.service';
+import type { StringValue } from 'ms';
+
+const RESET_TOKEN_EXPIRES_IN_SECONDS = 15 * 60; // 15 minutes
+const RESET_TOKEN_PURPOSE = 'password-reset';
+
+const ALLOWED_PROFILE_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+];
+const MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+export type ProfileImageFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
 
 @Injectable()
 export class AuthService {
@@ -39,13 +66,16 @@ export class AuthService {
     private readonly loginProtection: LoginProtectionService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly cacheInvalidation: CacheInvalidationService,
+    private readonly cloudinaryService: CloudinaryService,
+    private readonly otpService: OtpService,
+    private readonly mailService: MailService,
+    private readonly redisService: RedisService,
   ) {}
 
   async register(
     {
       username,
       password,
-      role,
       firstName,
       lastName,
       country,
@@ -54,12 +84,12 @@ export class AuthService {
       nationalId,
     }: RegisterDto,
     req: Request,
+    file?: ProfileImageFile,
   ) {
     this.ensureNoActiveSession(req);
     if (
       !username ||
       !password ||
-      !role ||
       !firstName ||
       !lastName ||
       !country ||
@@ -73,7 +103,19 @@ export class AuthService {
     if (user) {
       throw new ConflictException('This username is already exists');
     }
+
+    // Public registration can NEVER choose a role - everyone starts as EMPLOYEE.
+    const role = Role.employee;
     const hashedPassword = await bcrypt.hash(password, 10);
+    let profilePicture: string | undefined;
+    if (file) {
+      this.validateProfileImage(file);
+      profilePicture = await this.cloudinaryService.uploadImage({
+        buffer: file.buffer,
+        mimetype: file.mimetype,
+        originalname: file.originalname,
+      });
+    }
 
     // User and Employee are created together in one transaction so a failure
     // while saving either one rolls the whole registration back. The owning
@@ -91,6 +133,7 @@ export class AuthService {
           username,
           password: hashedPassword,
           role,
+          profilePicture,
           // New accounts always start unverified and must complete the OTP flow.
           isEmailVerified: false,
           emailVerifiedAt: null,
@@ -115,7 +158,7 @@ export class AuthService {
 
     this.eventEmitter.emit('audit.log.created', {
       userId: savedUser.id,
-      action: AuditAction.CREATE,
+      action: AuditAction.USER_REGISTERED,
       entity: 'User',
       entityId: String(savedUser.id),
       description: 'User registered an account',
@@ -137,16 +180,51 @@ export class AuthService {
     // so the failure is surfaced without rolling back the registration.
     await this.emailVerificationService.sendOtpForNewUser(savedUser);
 
-    // No tokens are issued here - the user is not authenticated until their
-    // email has been verified.
+    // No token is issued here. The account is created unverified and the access
+    // token (plus refresh session) is only granted once the email is verified
+    // via POST /auth/verify-email - mirroring how login only issues tokens
+    // after the verification gate passes.
     return {
       success: true,
+      statusCode: 201,
       message:
         'Registration successful. Please check your email to verify your account.',
+      data: {
+        user: {
+          id: savedUser.id,
+          firstName: savedUser.firstName,
+          lastName: savedUser.lastName,
+          username: savedUser.username,
+          role: savedUser.role,
+          profilePicture: savedUser.profilePicture ?? null,
+        },
+      },
     };
   }
 
-  async login(username: string, password: string, res: Response, req: Request) {
+  /**
+   * Validates an uploaded profile image: only JPEG/JPG/PNG/WEBP are accepted
+   * and the file must be below the size limit. Rejects everything else so
+   * arbitrary files are never stored as a profile picture.
+   */
+  private validateProfileImage(file: ProfileImageFile): void {
+    if (!ALLOWED_PROFILE_IMAGE_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Profile image must be a JPEG, JPG, PNG or WEBP file',
+      );
+    }
+    if (file.size > MAX_PROFILE_IMAGE_BYTES) {
+      throw new BadRequestException('Profile image must be 2 MB or smaller');
+    }
+  }
+
+  async login(
+    username: string,
+    password: string,
+    rememberMe: boolean,
+    res: Response,
+    req: Request,
+  ) {
     this.ensureNoActiveSession(req);
 
     const ip = this.resolveIp(req);
@@ -226,10 +304,17 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '15m',
+      expiresIn: this.getAccessTokenExpiresIn(),
     });
 
-    await this.issueRefreshSession(user.id, payload, req, res);
+    // Embed rememberMe in the refresh token payload (signed, tamper-proof) so
+    // the chosen lifetime survives later refresh-token rotations.
+    await this.issueRefreshSession(
+      user.id,
+      { ...payload, rememberMe },
+      req,
+      res,
+    );
 
     this.eventEmitter.emit('audit.log.created', {
       userId: user.id,
@@ -253,8 +338,248 @@ export class AuthService {
     return this.emailVerificationService.requestVerificationOtp(email);
   }
 
-  verifyEmail(email: string, otp: string) {
-    return this.emailVerificationService.verifyEmail(email, otp);
+  async verifyEmail(
+    email: string,
+    otp: string,
+    req: Request,
+    res?: Response,
+  ) {
+    // Throws (InvalidOtp / OtpExpired / EmailAlreadyVerified) on failure.
+    await this.emailVerificationService.verifyEmail(email, otp);
+
+    const normalized = email.toLowerCase().trim();
+    const user = await this.userRepository.findOne({
+      where: { username: normalized },
+      relations: ['employee'],
+    });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Verification succeeded - this is the moment the account becomes
+    // authenticated, so issue the access token and a refresh session exactly
+    // like login does.
+    const payload = {
+      sub: user.id,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+    };
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: this.getAccessTokenExpiresIn(),
+    });
+
+    if (res) {
+      await this.issueRefreshSession(String(user.id), payload, req, res);
+    }
+
+    return {
+      success: true,
+      message: 'Email verified successfully. You are now signed in.',
+      data: {
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          username: user.username,
+          role: user.role,
+          profilePicture: user.profilePicture ?? null,
+          isEmailVerified: user.isEmailVerified,
+        },
+        accessToken,
+      },
+    };
+  }
+
+  /**
+   * Issues a password-reset OTP and emails it. The response is identical
+   * whether or not the account exists so the endpoint cannot be used to
+   * enumerate registered emails.
+   */
+  async forgotPassword(email: string, req: Request) {
+    const normalized = email.toLowerCase().trim();
+    const user = await this.userRepository.findOne({
+      where: { username: normalized },
+      relations: ['employee'],
+    });
+
+    if (user) {
+      const { otp, expiresInSeconds } =
+        await this.otpService.issuePasswordResetOtp(normalized);
+      await this.mailService.sendPasswordResetOtp(
+        normalized,
+        otp,
+        Math.max(Math.round(expiresInSeconds / 60), 1),
+        user.firstName,
+      );
+      this.eventEmitter.emit('audit.log.created', {
+        userId: user.id,
+        action: AuditAction.PASSWORD_RESET_REQUESTED,
+        entity: 'User',
+        entityId: String(user.id),
+        description: 'User requested a password reset',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    }
+
+    return {
+      success: true,
+      message:
+        'If the account exists, a password reset code has been sent to your email.',
+    };
+  }
+
+  async resetPassword(
+    resetToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<{ success: boolean; message: string }> {
+    if (password !== confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    // Tolerate a "Bearer " prefix and a missing/empty header.
+    const token = resetToken?.startsWith('Bearer ')
+      ? resetToken.slice('Bearer '.length)
+      : resetToken;
+
+    if (!token) {
+      throw new BadRequestException(
+        'Reset token is required. Send the token returned by POST /auth/verify-reset-otp in the "reset-token" request header.',
+      );
+    }
+
+    let decoded: { sub: string; purpose: string; jti: string };
+    try {
+      decoded = this.jwtService.verify<{
+        sub: string;
+        purpose: string;
+        jti: string;
+      }>(token);
+    } catch {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (decoded.purpose !== RESET_TOKEN_PURPOSE) {
+      throw new BadRequestException('Invalid reset token');
+    }
+
+    // Single-use: the jti must still exist in Redis. It is deleted on first
+    // successful use, so a reused or expired token is rejected.
+    const resetTokenKey = OtpKeys.resetToken(decoded.jti);
+    const stored = await this.redisService.get(resetTokenKey);
+    if (stored === null) {
+      throw new BadRequestException(
+        'Reset token has already been used or has expired',
+      );
+    }
+    await this.redisService.delete(resetTokenKey);
+
+    const email = decoded.sub;
+    const user = await this.userRepository.findOne({
+      where: { username: email },
+    });
+    if (!user) {
+      throw new BadRequestException('Invalid reset request');
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    // Invalidate every existing session/token so a reset also logs out the
+    // old password holder everywhere.
+    user.tokenVersion += 1;
+    await this.userRepository.save(user);
+
+    this.eventEmitter.emit('audit.log.created', {
+      userId: user.id,
+      action: AuditAction.PASSWORD_RESET_COMPLETED,
+      entity: 'User',
+      entityId: String(user.id),
+      description: 'User reset their password',
+    });
+
+    return { success: true, message: 'Password has been reset' };
+  }
+
+  /**
+   * Validates a password-reset OTP and, on success, issues a single-use reset
+   * token (a short-lived JWT carrying the email + a jti). The OTP is consumed
+   * at this point so it cannot be replayed, and the reset token is tracked in
+   * Redis so it can only be used once by resetPassword.
+   */
+  async checkResetPasswordOtp(
+    email: string,
+    otp: string,
+  ): Promise<{
+    success: boolean;
+    valid: boolean;
+    message: string;
+    resetToken?: string;
+    errorCode?: string;
+  }> {
+    const normalized = email.toLowerCase().trim();
+    const result = await this.otpService.verifyPasswordResetOtp(
+      normalized,
+      otp,
+    );
+
+    switch (result) {
+      case OtpVerificationResult.VALID: {
+        // Consume the OTP now that it has served its purpose.
+        await this.otpService.clearPasswordResetOtp(normalized);
+
+        const jti = randomUUID();
+        const resetToken = this.jwtService.sign(
+          { sub: normalized, purpose: RESET_TOKEN_PURPOSE, jti },
+          { expiresIn: `${RESET_TOKEN_EXPIRES_IN_SECONDS}s` },
+        );
+
+        // Single-use: the jti is deleted by resetPassword on first use.
+        await this.redisService.set(
+          OtpKeys.resetToken(jti),
+          '1',
+          RESET_TOKEN_EXPIRES_IN_SECONDS,
+        );
+
+        return {
+          success: true,
+          valid: true,
+          message: 'OTP is valid',
+          resetToken,
+        };
+      }
+      case OtpVerificationResult.EXPIRED: {
+        // The reset OTP key is absent. This most often means the email here
+        // does not match the one used for forgot-password, or the user pasted
+        // the email-verification code. Surface a helpful hint when a
+        // verification OTP exists for the same email.
+        const hasVerificationOtp =
+          (await this.redisService.get(OtpKeys.otp(normalized))) !== null;
+
+        return {
+          success: false,
+          valid: false,
+          message: hasVerificationOtp
+            ? 'This code looks like an email verification code, not a password reset code. Use the code sent in the password reset email, and make sure the email matches the one used for forgot-password.'
+            : 'The reset code has expired or was not requested for this email. Please request a new one and use the same email.',
+          errorCode: 'OTP_EXPIRED',
+        };
+      }
+      case OtpVerificationResult.TOO_MANY_ATTEMPTS:
+        return {
+          success: false,
+          valid: false,
+          message: 'Too many invalid attempts. Please request a new code.',
+          errorCode: 'OTP_TOO_MANY_ATTEMPTS',
+        };
+      case OtpVerificationResult.INVALID:
+      default:
+        return {
+          success: false,
+          valid: false,
+          message: 'Invalid reset code',
+          errorCode: 'INVALID_OTP',
+        };
+    }
   }
 
   async refreshToken(
@@ -312,12 +637,17 @@ export class AuthService {
       };
 
       const accessToken = this.jwtService.sign(accessPayload, {
-        expiresIn: '15m',
+        expiresIn: this.getAccessTokenExpiresIn(),
       });
 
+      // Preserve the original rememberMe choice across rotation so a 30-day
+      // "remember me" session does not silently shrink to the normal lifetime.
       await this.issueRefreshSession(
         String(user.id),
-        accessPayload,
+        {
+          ...accessPayload,
+          rememberMe: (payload as { rememberMe?: boolean }).rememberMe,
+        },
         req,
         res,
         sessionId,
@@ -408,32 +738,62 @@ export class AuthService {
     );
   }
 
-  private getRefreshTokenExpiresIn() {
-    return this.configService.get<string>('REFRESH_EXPIRES_IN') ?? '7d';
+  private getAccessTokenExpiresIn(): StringValue {
+    return (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ??
+      '15m') as StringValue;
   }
 
-  private getRefreshToken(payload: Record<string, unknown>) {
-    const expiresIn = this.getRefreshTokenExpiresIn();
-
-    return this.jwtService.sign(payload, {
-      secret: this.getRefreshSecret(),
-      expiresIn: expiresIn as any,
-    });
-  }
-
-  private getRefreshTokenMaxAge() {
-    const expiresIn = this.getRefreshTokenExpiresIn();
-
-    if (expiresIn.endsWith('d')) {
-      const days = Number(expiresIn.slice(0, -1));
-      return days * 24 * 60 * 60 * 1000;
+  /**
+   * Returns the refresh-token lifetime string. Remember Me extends the session
+   * to JWT_REFRESH_REMEMBER_EXPIRES_IN, otherwise the normal JWT_REFRESH_EXPIRES_IN
+   * is used (falling back to the legacy REFRESH_EXPIRES_IN for compatibility).
+   */
+  private getRefreshExpiration(rememberMe: boolean): StringValue {
+    if (rememberMe) {
+      return (this.configService.get<string>('JWT_REFRESH_REMEMBER_EXPIRES_IN') ??
+        '30d') as StringValue;
     }
 
-    return 7 * 24 * 60 * 60 * 1000;
+    return (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ??
+      this.configService.get<string>('REFRESH_EXPIRES_IN') ??
+      '1d') as StringValue;
   }
 
-  private getRefreshTokenTtlSeconds(): number {
-    return Math.floor(this.getRefreshTokenMaxAge() / 1000);
+  private parseExpirationToMs(expiresIn: string): number {
+    const match = /^(\d+)\s*(s|m|h|d)$/.exec(expiresIn.trim());
+
+    if (!match) {
+      return 7 * 24 * 60 * 60 * 1000;
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2] as 's' | 'm' | 'h' | 'd';
+    const multiplier: Record<'s' | 'm' | 'h' | 'd', number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return value * multiplier[unit];
+  }
+
+  private getRefreshTokenMaxAge(rememberMe: boolean): number {
+    return this.parseExpirationToMs(this.getRefreshExpiration(rememberMe));
+  }
+
+  private getRefreshTokenTtlSeconds(rememberMe: boolean): number {
+    return Math.floor(this.getRefreshTokenMaxAge(rememberMe) / 1000);
+  }
+
+  private getRefreshToken(
+    payload: Record<string, unknown>,
+    rememberMe: boolean,
+  ): string {
+    return this.jwtService.sign(payload, {
+      secret: this.getRefreshSecret(),
+      expiresIn: this.getRefreshExpiration(rememberMe),
+    });
   }
 
   private resolveIp(req: Request): string {
@@ -459,11 +819,18 @@ export class AuthService {
     res: Response,
     existingSessionId?: string,
   ): Promise<string> {
+    const rememberMe = Boolean(
+      (payload as { rememberMe?: boolean }).rememberMe,
+    );
     const sessionId =
       existingSessionId ?? this.sessionService.generateSessionId();
-    const ttlSeconds = this.getRefreshTokenTtlSeconds();
+    const ttlSeconds = this.getRefreshTokenTtlSeconds(rememberMe);
+    const maxAge = this.getRefreshTokenMaxAge(rememberMe);
 
-    const refreshToken = this.getRefreshToken({ ...payload, sid: sessionId });
+    const refreshToken = this.getRefreshToken(
+      { ...payload, sid: sessionId },
+      rememberMe,
+    );
 
     await this.sessionService.createSession(
       {
@@ -472,6 +839,7 @@ export class AuthService {
         ttlSeconds,
         ipAddress: req ? this.resolveIp(req) : undefined,
         userAgent: req?.get('user-agent') ?? undefined,
+        rememberMe,
       },
       sessionId,
     );
@@ -480,7 +848,7 @@ export class AuthService {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: this.getRefreshTokenMaxAge(),
+      maxAge,
     });
 
     // Readable marker so the frontend can detect a session exists without
@@ -489,7 +857,7 @@ export class AuthService {
       httpOnly: false,
       secure: false,
       sameSite: 'lax',
-      maxAge: this.getRefreshTokenMaxAge(),
+      maxAge,
     });
 
     return sessionId;

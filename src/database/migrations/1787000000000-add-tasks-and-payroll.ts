@@ -14,9 +14,7 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
   name = 'AddTasksAndPayroll1787000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`,
-    );
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
     // ---------------------------------------------------------------------
     // Enums
@@ -231,10 +229,15 @@ export class AddTasksAndPayroll1787000000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "compensation"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "task"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "public"."bonus_type_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."deduction_type_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."payroll_status_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."task_priority_enum"`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."deduction_type_enum"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."payroll_status_enum"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."task_priority_enum"`,
+    );
     await queryRunner.query(`DROP TYPE IF EXISTS "public"."task_status_enum"`);
   }
 }
-

@@ -27,32 +27,32 @@ describe('NotificationsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
-          {
-            provide: getRepositoryToken(Notification),
-            useValue: {
-              create: jest.fn(),
-              save: jest.fn(),
-              findOne: jest.fn(),
-              find: jest.fn(),
-              findAndCount: jest.fn(),
-              update: jest.fn(),
-              delete: jest.fn(),
-            },
+        {
+          provide: getRepositoryToken(Notification),
+          useValue: {
+            create: jest.fn(),
+            save: jest.fn(),
+            findOne: jest.fn(),
+            find: jest.fn(),
+            findAndCount: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
           },
-          {
-            provide: RedisService,
-            useValue: {
-              get: jest.fn().mockResolvedValue(null),
-              getJson: jest.fn().mockResolvedValue(null),
-              set: jest.fn().mockResolvedValue(true),
-              setJson: jest.fn().mockResolvedValue(true),
-              exists: jest.fn().mockResolvedValue(false),
-              increment: jest.fn().mockResolvedValue(1),
-              decrement: jest.fn().mockResolvedValue(0),
-              delete: jest.fn().mockResolvedValue(1),
-            },
+        },
+        {
+          provide: RedisService,
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            getJson: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue(true),
+            setJson: jest.fn().mockResolvedValue(true),
+            exists: jest.fn().mockResolvedValue(false),
+            increment: jest.fn().mockResolvedValue(1),
+            decrement: jest.fn().mockResolvedValue(0),
+            delete: jest.fn().mockResolvedValue(1),
           },
-        ],
+        },
+      ],
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);

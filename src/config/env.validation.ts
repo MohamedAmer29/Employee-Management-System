@@ -16,6 +16,8 @@ const REQUIRED_VARIABLES = [
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
+  'INITIAL_ADMIN_EMAIL',
+  'INITIAL_ADMIN_PASSWORD',
 ] as const;
 
 export function validateEnv(
@@ -56,6 +58,18 @@ export function validateEnv(
 
     if (Number.isNaN(parsed) || parsed < 4 || parsed > 10) {
       throw new Error('OTP_LENGTH must be a number between 4 and 10');
+    }
+  }
+
+  const passwordResetExpiresIn = config.PASSWORD_RESET_OTP_EXPIRES_IN;
+
+  if (passwordResetExpiresIn !== undefined && passwordResetExpiresIn !== '') {
+    const parsed = Number(passwordResetExpiresIn);
+
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      throw new Error(
+        'PASSWORD_RESET_OTP_EXPIRES_IN must be a positive number of seconds',
+      );
     }
   }
 

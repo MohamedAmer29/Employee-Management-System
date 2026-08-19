@@ -22,6 +22,7 @@ export interface SessionMetadata {
   expiresAt: string;
   ipAddress?: string;
   userAgent?: string;
+  rememberMe?: boolean;
 }
 
 export interface RateLimitResult {

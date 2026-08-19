@@ -412,6 +412,61 @@ export class AdminController {
     return this.adminService.makeUserAdmin(id);
   }
 
+  @Patch('users/:id/make-admin')
+  @Roles(Role.admin)
+  @ApiOperation({ summary: 'Promote an existing user to administrator' })
+  @ApiParam({ name: 'id', description: 'User id to promote' })
+  @ApiResponse({
+    status: 200,
+    description: 'User promoted to admin',
+    schema: { example: ADMIN_EXAMPLE },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin access required',
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 409, description: 'User is already an admin' })
+  makeUserAdminPatch(@Param('id') id: string) {
+    return this.adminService.makeUserAdmin(id);
+  }
+
+  @Patch('employees/:employeeId/make-manager')
+  @Roles(Role.admin)
+  @ApiOperation({
+    summary: 'Promote an existing employee to manager',
+    description:
+      'Changes the employee user role to MANAGER in place. The User and Employee records are preserved (no duplicate account). Only active employees can be promoted.',
+  })
+  @ApiParam({ name: 'employeeId', description: 'Employee id to promote' })
+  @ApiResponse({
+    status: 200,
+    description: 'Employee promoted to manager',
+    schema: {
+      example: {
+        success: true,
+        message: 'Employee promoted to manager successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin access required',
+  })
+  @ApiResponse({ status: 404, description: 'Employee not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Target is not an employee / already a manager',
+  })
+  makeManager(
+    @Param('employeeId') employeeId: string,
+    @CurrentUser('userId') adminId: string,
+  ) {
+    return this.adminService.makeManager(employeeId, adminId);
+  }
+
   @Post('users/:id/logout')
   @Roles(Role.admin)
   @ApiOperation({

@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * added if it does not already exist (so re-running or a parallel
  * `synchronize: true` cannot fail).
  */
-export class AddAttendanceStatusColumn1786650000000
-  implements MigrationInterface
-{
+export class AddAttendanceStatusColumn1786650000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       DO $$

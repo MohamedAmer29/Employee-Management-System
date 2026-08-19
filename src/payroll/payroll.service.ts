@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -24,7 +29,12 @@ import { CalculatePayrollDto } from './dto/calculate-payroll.dto';
 import { CreateDeductionDto } from './dto/create-deduction.dto';
 import { CreateBonusDto } from './dto/create-bonus.dto';
 import { PayrollQueryDto } from './dto/payroll-query.dto';
-import { addMoney, divideMoney, multiplyMoney } from '@/common/utils/money.util';
+import {
+  addMoney,
+  divideMoney,
+  multiplyMoney,
+} from '@/common/utils/money.util';
+import { getBusinessDate } from '@/common/utils/timezones.util';
 
 interface Actor {
   employee?: Employee;
@@ -103,19 +113,20 @@ export class PayrollService {
   ): Promise<Record<string, unknown>> {
     const { month, year, baseSalary, workingDays } = dto;
 
-    const existing = await this.findCompensation(target.id, isManager, month, year);
+    const existing = await this.findCompensation(
+      target.id,
+      isManager,
+      month,
+      year,
+    );
     if (existing) {
       throw new BadRequestException(
         'A payroll record already exists for this person in the given period',
       );
     }
 
-    const { attendedDays, leaveDays, absentDays } = await this.computeAttendance(
-      target.id,
-      month,
-      year,
-      workingDays,
-    );
+    const { attendedDays, leaveDays, absentDays } =
+      await this.computeAttendance(target.id, month, year, workingDays);
 
     const dailySalary = divideMoney(baseSalary, workingDays);
     const attendanceDeduction = multiplyMoney(dailySalary, absentDays);
@@ -146,7 +157,14 @@ export class PayrollService {
 
     const saved = await this.compensationRepository.save(compensation);
 
-    await this.recordSalaryHistory(target, isManager, baseSalary, month, year, currentUserId);
+    await this.recordSalaryHistory(
+      target,
+      isManager,
+      baseSalary,
+      month,
+      year,
+      currentUserId,
+    );
     await this.notifyTarget(
       target,
       `Your payroll for ${this.monthLabel(month, year)} has been calculated. Net salary: ${netSalary}`,
@@ -166,6 +184,123 @@ export class PayrollService {
   // ---------------------------------------------------------------------------
   // Retrieval
   // ---------------------------------------------------------------------------
+
+  /**
+   * Aggregated payroll statistics for the manager's own department. Read-only
+   * and always scoped to the manager's department (derived from the JWT
+   * principal, never from a request parameter).
+   */
+  async getManagerSummary(
+    managerUserId: string,
+    query: PayrollQueryDto,
+  ): Promise<Record<string, unknown>> {
+    const actor = await this.getActor(managerUserId, Role.manager);
+    const departmentId = actor.departmentId;
+    if (!departmentId) {
+      return {
+        totalEmployees: 0,
+        totalBaseSalary: 0,
+        totalDeductions: 0,
+        totalBonuses: 0,
+        totalNetSalary: 0,
+        pendingPayroll: 0,
+        approvedPayroll: 0,
+        paidPayroll: 0,
+      };
+    }
+
+    const qb = this.compensationRepository
+      .createQueryBuilder('comp')
+      .leftJoin('comp.employee', 'employee')
+      .select('COUNT(comp.id)', 'count')
+      .addSelect('COALESCE(SUM(comp.baseSalary), 0)', 'totalBaseSalary')
+      .addSelect('COALESCE(SUM(comp.totalDeductions), 0)', 'totalDeductions')
+      .addSelect('COALESCE(SUM(comp.totalBonuses), 0)', 'totalBonuses')
+      .addSelect('COALESCE(SUM(comp.netSalary), 0)', 'totalNetSalary')
+      .addSelect(
+        `COUNT(CASE WHEN comp.status = '${PayrollStatus.CALCULATED}' THEN 1 END)`,
+        'pending',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN comp.status = '${PayrollStatus.APPROVED}' THEN 1 END)`,
+        'approved',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN comp.status = '${PayrollStatus.PAID}' THEN 1 END)`,
+        'paid',
+      )
+      .where('employee.departmentId = :departmentId', { departmentId });
+
+    if (query.month) {
+      qb.andWhere('comp.month = :month', { month: query.month });
+    }
+    if (query.year) {
+      qb.andWhere('comp.year = :year', { year: query.year });
+    }
+    if (query.status) {
+      qb.andWhere('comp.status = :status', { status: query.status });
+    }
+
+    const row = await qb.getRawOne<{
+      count: string;
+      totalBaseSalary: string;
+      totalDeductions: string;
+      totalBonuses: string;
+      totalNetSalary: string;
+      pending: string;
+      approved: string;
+      paid: string;
+    }>();
+
+    const totalEmployees = await this.employeeRepository.count({
+      where: { department: { id: departmentId }, isActive: true },
+    });
+
+    return {
+      totalEmployees,
+      totalBaseSalary: Number(row?.totalBaseSalary) || 0,
+      totalDeductions: Number(row?.totalDeductions) || 0,
+      totalBonuses: Number(row?.totalBonuses) || 0,
+      totalNetSalary: Number(row?.totalNetSalary) || 0,
+      pendingPayroll: parseInt(row?.pending ?? '0', 10) || 0,
+      approvedPayroll: parseInt(row?.approved ?? '0', 10) || 0,
+      paidPayroll: parseInt(row?.paid ?? '0', 10) || 0,
+    };
+  }
+
+  /**
+   * The authenticated employee's payroll record for the current business
+   * month/year, or null when none has been calculated yet.
+   */
+  async getEmployeeCurrentPayroll(
+    employeeUserId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const user = await this.userRepository.findOne({
+      where: { id: employeeUserId },
+      relations: ['employee'],
+    });
+    if (!user || !user.employee) {
+      throw new ForbiddenException(ERROR_MESSAGES.FORBIDDEN);
+    }
+    const [year, month] = getBusinessDate().split('-').map(Number);
+    const compensation = await this.compensationRepository.findOne({
+      where: {
+        employee: { id: user.employee.id },
+        month,
+        year,
+      },
+      relations: [
+        'employee',
+        'employee.user',
+        'employee.department',
+        'manager',
+        'deductions',
+        'bonuses',
+        'createdBy',
+      ],
+    });
+    return compensation ? this.toResponse(compensation) : null;
+  }
 
   async findOne(
     id: string,
@@ -244,7 +379,10 @@ export class PayrollService {
     query: PayrollQueryDto,
     role: Role,
     currentUserId: string,
-  ): Promise<{ data: Record<string, unknown>[]; pagination: Record<string, unknown> }> {
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: Record<string, unknown>;
+  }> {
     const actor = await this.getActor(currentUserId, role);
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
@@ -268,10 +406,9 @@ export class PayrollService {
       );
     }
     if (role === Role.employee && actor.employee) {
-      qb.andWhere(
-        '(employee.id = :employeeId OR manager.id = :employeeId)',
-        { employeeId: actor.employee.id },
-      );
+      qb.andWhere('(employee.id = :employeeId OR manager.id = :employeeId)', {
+        employeeId: actor.employee.id,
+      });
     }
     if (query.month) {
       qb.andWhere('comp.month = :month', { month: query.month });
@@ -283,10 +420,14 @@ export class PayrollService {
       qb.andWhere('comp.status = :status', { status: query.status });
     }
     if (query.employeeId) {
-      qb.andWhere('employee.id = :employeeId', { employeeId: query.employeeId });
+      qb.andWhere('employee.id = :employeeId', {
+        employeeId: query.employeeId,
+      });
     }
     if (query.managerId) {
-      qb.andWhere('manager.user.id = :managerId', { managerId: query.managerId });
+      qb.andWhere('manager.user.id = :managerId', {
+        managerId: query.managerId,
+      });
     }
     if (query.search) {
       qb.andWhere(
@@ -433,7 +574,9 @@ export class PayrollService {
     const actor = await this.getActor(currentUserId, Role.admin);
     this.authorize(compensation, actor, Role.admin, false);
     if (compensation.status !== PayrollStatus.APPROVED) {
-      throw new BadRequestException('Only approved payroll can be marked as paid');
+      throw new BadRequestException(
+        'Only approved payroll can be marked as paid',
+      );
     }
     compensation.status = PayrollStatus.PAID;
     const saved = await this.compensationRepository.save(compensation);
@@ -467,10 +610,7 @@ export class PayrollService {
       (sum, d) => addMoney(sum, d.amount),
       0,
     );
-    const totalBonuses = bonuses.reduce(
-      (sum, b) => addMoney(sum, b.amount),
-      0,
-    );
+    const totalBonuses = bonuses.reduce((sum, b) => addMoney(sum, b.amount), 0);
 
     compensation.totalDeductions = addMoney(
       compensation.attendanceDeduction,
@@ -499,10 +639,9 @@ export class PayrollService {
       .where('a.employeeId = :employeeId', { employeeId })
       .andWhere('a.date >= :start', { start: monthStart })
       .andWhere('a.date <= :end', { end: monthEnd })
-      .andWhere(
-        '(a.isPresent = true OR a.status IN (:...statuses))',
-        { statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE] },
-      )
+      .andWhere('(a.isPresent = true OR a.status IN (:...statuses))', {
+        statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
+      })
       .getCount();
 
     const leaves = await this.leaveRepository
@@ -514,14 +653,12 @@ export class PayrollService {
       .getMany();
 
     const leaveDays = leaves.reduce(
-      (sum, l) => sum + this.overlapDays(l.startDate, l.endDate, monthStart, monthEnd),
+      (sum, l) =>
+        sum + this.overlapDays(l.startDate, l.endDate, monthStart, monthEnd),
       0,
     );
 
-    const absentDays = Math.max(
-      0,
-      workingDays - attendedDays - leaveDays,
-    );
+    const absentDays = Math.max(0, workingDays - attendedDays - leaveDays);
 
     return { attendedDays, leaveDays, absentDays };
   }
@@ -564,9 +701,13 @@ export class PayrollService {
       .where('comp.month = :month', { month })
       .andWhere('comp.year = :year', { year });
     if (isManager) {
-      qb.andWhere('comp.manager.id = :targetId', { targetId: targetEmployeeId });
+      qb.andWhere('comp.manager.id = :targetId', {
+        targetId: targetEmployeeId,
+      });
     } else {
-      qb.andWhere('comp.employee.id = :targetId', { targetId: targetEmployeeId });
+      qb.andWhere('comp.employee.id = :targetId', {
+        targetId: targetEmployeeId,
+      });
     }
     return qb.getOne();
   }
@@ -636,10 +777,7 @@ export class PayrollService {
     return compensation;
   }
 
-  private async getActor(
-    userId: string,
-    role: Role,
-  ): Promise<Actor> {
+  private async getActor(userId: string, role: Role): Promise<Actor> {
     if (role === Role.admin) {
       return {};
     }
@@ -706,10 +844,7 @@ export class PayrollService {
     throw new ForbiddenException(ERROR_MESSAGES.FORBIDDEN);
   }
 
-  private async notifyTarget(
-    target: Employee,
-    message: string,
-  ): Promise<void> {
+  private async notifyTarget(target: Employee, message: string): Promise<void> {
     const userId = target.user?.id;
     if (!userId) {
       return;
@@ -780,7 +915,8 @@ export class PayrollService {
       createdBy: compensation.createdBy
         ? {
             id: compensation.createdBy.id,
-            fullName: `${compensation.createdBy.firstName} ${compensation.createdBy.lastName}`.trim(),
+            fullName:
+              `${compensation.createdBy.firstName} ${compensation.createdBy.lastName}`.trim(),
           }
         : null,
       createdAt: compensation.createdAt,
