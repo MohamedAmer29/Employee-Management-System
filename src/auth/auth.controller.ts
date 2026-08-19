@@ -303,7 +303,7 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit({
     scope: 'auth:verify-email',
-    limit: 10,
+    limit: 5,
     windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
     trackBodyField: 'email',
   })
@@ -409,7 +409,7 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit({
     scope: 'auth:forgot-password',
-    limit: 100,
+    limit: 5,
     windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
     trackBodyField: 'email',
   })
@@ -439,7 +439,7 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit({
     scope: 'auth:reset-password',
-    limit: 100,
+    limit: 5,
     windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
   })
   @ApiOperation({
@@ -480,7 +480,7 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit({
     scope: 'auth:verify-reset-otp',
-    limit: 100,
+    limit: 5,
     windowSeconds: OTP_DEFAULTS.RESEND_WINDOW_SECONDS,
     trackBodyField: 'email',
   })
