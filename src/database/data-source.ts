@@ -39,8 +39,8 @@ export const AppDataSource = new DataSource({
   host: process.env.DATABASE_HOST ?? process.env.HOST ?? 'localhost',
   port: Number(process.env.DATABASE_PORT ?? 5432),
   username: process.env.DATABASE_USERNAME,
-  password: process.env.PASSWORD,
-  database: process.env.DATABASE,
+  password: process.env.DATABASE_PASSWORD ?? process.env.PASSWORD,
+  database: process.env.DATABASE_NAME ?? process.env.DATABASE,
   entities: [
     User,
     Employee,

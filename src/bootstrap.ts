@@ -36,9 +36,21 @@ export function configureApp(app: INestApplication): void {
   // Serve uploaded files (profile pictures, etc.) statically.
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
-  // CORS for local Vite dev server (port 5173) + credentials (cookies)
+  // Dynamic CORS configuration using FRONTEND_URL or local fallback
+  const frontendUrl = process.env.FRONTEND_URL;
+  const allowedOrigins = frontendUrl
+    ? frontendUrl.split(',').map((url) => url.trim().replace(/\/+$/, ''))
+    : ['http://localhost:5173'];
+
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'reset-token'],

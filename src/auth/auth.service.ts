@@ -844,10 +844,12 @@ export class AuthService {
       sessionId,
     );
 
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge,
     });
 
@@ -855,8 +857,8 @@ export class AuthService {
     // touching the httpOnly refresh token. Never carries the token itself.
     res.cookie('refresh_token_present', '1', {
       httpOnly: false,
-      secure: false,
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge,
     });
 

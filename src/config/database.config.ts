@@ -22,12 +22,14 @@ export const getDatabaseConfig = (
     host: resolveDatabaseHost(configService),
     port: Number(configService.get<string>('DATABASE_PORT') ?? 5432),
     username: configService.get<string>('DATABASE_USERNAME'),
-    password: configService.get<string>('PASSWORD'),
-    database: configService.get<string>('DATABASE'),
+    password:
+      configService.get<string>('DATABASE_PASSWORD') ??
+      configService.get<string>('PASSWORD'),
+    database: configService.get<string>('DATABASE_NAME') ?? configService.get<string>('DATABASE'),
     autoLoadEntities: true,
     // Schema is managed by migrations in production. Auto-synchronising a
     // production database can silently drop columns and lose data.
-    synchronize: true,
+    synchronize: !isProduction,
     migrationsRun: false,
     logging: nodeEnv === 'development',
   };
