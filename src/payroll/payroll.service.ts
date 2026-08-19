@@ -274,7 +274,7 @@ export class PayrollService {
    */
   async getEmployeeCurrentPayroll(
     employeeUserId: string,
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<Record<string, unknown>> {
     const user = await this.userRepository.findOne({
       where: { id: employeeUserId },
       relations: ['employee'],
@@ -299,7 +299,14 @@ export class PayrollService {
         'createdBy',
       ],
     });
-    return compensation ? this.toResponse(compensation) : null;
+
+    // Always return valid JSON. A missing record for the current month is an
+    // expected state (payroll may not have been calculated yet), so respond
+    // with a clear object instead of `null` - Nest serialises `null` as an
+    // empty body, which makes JSON-parsing clients (e.g. axios) fail.
+    return compensation
+      ? this.toResponse(compensation)
+      : { exists: false, year, month };
   }
 
   async findOne(
